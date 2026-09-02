@@ -1,10 +1,10 @@
-"use server";
-
 import { createClient } from "@supabase/supabase-js";
 
-// Cliente do Supabase usado apenas no servidor (server actions / RSC).
-// Usa a SERVICE_ROLE_KEY, que tem acesso total ao Storage e ignora RLS.
-// Por isso este arquivo NUNCA deve ser importado por componentes de cliente.
+// Módulo server-only: cria o cliente Supabase com a SERVICE_ROLE_KEY (acesso
+// total ao Storage, ignora RLS). Como só é importado por lib/upload.ts (que é
+// "use server"), o código nunca é enviado ao navegador e a chave não vaza.
+// Não usamos "use server" aqui porque getSupabaseAdmin retorna o cliente
+// (não serializável) — server actions precisam ser async.
 const url = process.env.SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
