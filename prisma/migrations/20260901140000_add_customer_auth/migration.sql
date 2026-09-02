@@ -1,0 +1,2 @@
+ALTER TABLE "Customer" ADD COLUMN "passwordHash" TEXT;
+ALTER TABLE "Customer" ADD COLUMN "active" BOOLEAN NOT NULL DEFAULT true;

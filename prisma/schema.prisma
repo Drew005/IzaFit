@@ -1,0 +1,488 @@
+// ==========================================================================
+// SCHEMA DO BANCO DE DADOS — Gestão de loja (moda fitness, expansível)
+// ==========================================================================
+// Decisões de design pensando na evolução do negócio:
+//
+// 1. "Category" é genérica (não fala só de roupa) — assim, quando vocês
+//    quiserem vender whey, acessórios, etc., basta criar uma nova categoria
+//    e, se precisar, novos "Attribute" (ex.: sabor, peso) sem migrar nada.
+//
+// 2. "ProductVariant" separa o produto (ex.: "Legging Performance") da
+//    variação vendável (ex.: tamanho M, cor preta). Isso é obrigatório pra
+//    roupa, e continua funcionando pra produtos sem variação (whey 900g
+//    vira uma variante única do produto).
+//
+// 3. Todo produto tem "Attribute"/"AttributeValue" dinâmicos em vez de
+//    colunas fixas (size, color...). Isso evita alterar o schema quando
+//    entrar uma categoria nova com atributos diferentes (ex.: whey tem
+//    "sabor" e "peso", não "tamanho" e "cor").
+//
+// 4. Estoque nunca é só um número na tabela de produto: toda entrada/saída
+//    gera um "StockMovement", o que dá histórico e evita estoque "mentir".
+//
+// 5. Financeiro separado em três fontes que juntas formam o fluxo de caixa:
+//    Order (o que entra), Purchase (compra de mercadoria) e Expense (outros
+//    gastos: aluguel, marketing, etc). Nenhuma delas some, todas viram
+//    histórico auditável.
+//
+// 6. Já deixo "Store" (loja/filial) e "storeId" opcional espalhado pra não
+//    ter que reescrever tudo no dia em que abrirem uma segunda loja ou
+//    venderem online + físico como estoques separados.
+// ==========================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --------------------------------------------------------------------------
+// ACESSO / EQUIPE
+// --------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN // acesso total, inclusive financeiro
+  MANAGER // gerencia estoque, produtos, cupons, vê financeiro
+  SELLER // registra vendas, consulta estoque e clientes
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(SELLER)
+  active       Boolean  @default(true)
+  storeId      String?
+  store        Store?   @relation(fields: [storeId], references: [id])
+  createdAt    DateTime @default(now())
+
+  orders          Order[]          @relation("SellerOrders")
+  stockMovements  StockMovement[]
+  expensesLogged  Expense[]
+
+  @@index([storeId])
+}
+
+// Loja/filial. Hoje é 1 registro só, mas já modelado pra expandir.
+model Store {
+  id        String   @id @default(cuid())
+  name      String
+  cnpj      String?  @unique
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  users      User[]
+  orders     Order[]
+  purchases  Purchase[]
+  expenses   Expense[]
+  variants   ProductVariant[]
+}
+
+// --------------------------------------------------------------------------
+// CLIENTES
+// --------------------------------------------------------------------------
+
+model Customer {
+  id            String    @id @default(cuid())
+  name          String
+  email         String?   @unique
+  phone         String?
+  cpf           String?   @unique
+  birthDate     DateTime?
+  loyaltyPoints Int       @default(0) // pontos p/ programa de fidelidade / troca por brinde
+  notes         String?
+  createdAt     DateTime  @default(now())
+
+  // Conta de acesso à loja (cadastro público). Pode ser null quando o cliente
+  // foi criado pelo painel admin sem senha — nesse caso ele só entra depois
+  // de definir uma senha (ex.: redefinição).
+  passwordHash  String?
+  active        Boolean   @default(true)
+
+  addresses Address[]
+  orders    Order[]
+
+  @@index([phone])
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  label      String? // "Casa", "Trabalho"...
+  street     String
+  number     String
+  complement String?
+  district   String
+  city       String
+  state      String
+  zipCode    String
+  isDefault  Boolean  @default(false)
+
+  orders Order[]
+
+  @@index([customerId])
+}
+
+// --------------------------------------------------------------------------
+// CATÁLOGO — genérico o suficiente pra roupa, whey, acessórios, etc.
+// --------------------------------------------------------------------------
+
+model Category {
+  id       String     @id @default(cuid())
+  name     String     @unique // "Leggings", "Suplementos", "Acessórios"...
+  slug     String     @unique
+  parentId String?
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+
+  products Product[]
+  gifts    Gift[]
+
+  @@index([parentId])
+}
+
+model Supplier {
+  id        String     @id @default(cuid())
+  name      String
+  cnpj      String?    @unique
+  phone     String?
+  email     String?
+  createdAt DateTime   @default(now())
+
+  products  Product[]
+  purchases Purchase[]
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  supplierId  String?
+  supplier    Supplier? @relation(fields: [supplierId], references: [id])
+  brand       String?
+  // Fotos do produto. imageUrl é a capa; images guarda a galeria completa
+  // (podem ser caminhos locais como /uploads/products/xxx.jpg ou URLs).
+  imageUrl    String?
+  images      String[]   @default([])
+  // Características & detalhes do produto, ex.:
+  // [{ "title": "Características", "items": ["Compressão média", "Top com forro"] },
+  //  { "title": "Composição", "items": ["77% Poliamida | 12% Poliéster | 11% Elastano"] }]
+  details     Json?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  variants ProductVariant[]
+  gifts    Gift[]
+
+  @@index([categoryId])
+}
+
+// Atributo dinâmico do produto/variante: Tamanho, Cor, Sabor, Peso...
+// Permite crescer pra categorias com características totalmente diferentes
+// de roupa sem alterar o schema.
+model Attribute {
+  id     String            @id @default(cuid())
+  name   String            @unique // "Tamanho", "Cor", "Sabor"
+  values AttributeValue[]
+}
+
+model AttributeValue {
+  id          String    @id @default(cuid())
+  attributeId String
+  attribute   Attribute @relation(fields: [attributeId], references: [id])
+  value       String // "M", "Preto", "Chocolate"
+
+  variants VariantAttributeValue[]
+
+  @@unique([attributeId, value])
+}
+
+// Variação vendável de um produto (o que de fato tem preço e estoque).
+// Roupa: uma linha por tamanho+cor. Whey 900g sem variação: uma única linha.
+model ProductVariant {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku           String   @unique
+  barcode       String?  @unique
+  costPrice     Decimal  @db.Decimal(10, 2) // quanto custou comprar/produzir
+  sellPrice     Decimal  @db.Decimal(10, 2) // preço de venda atual
+  stockQuantity Int      @default(0) // cache — a fonte de verdade é StockMovement
+  minStockAlert Int      @default(5) // dispara alerta de estoque baixo
+  storeId       String?
+  store         Store?   @relation(fields: [storeId], references: [id])
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  attributeValues VariantAttributeValue[]
+  stockMovements  StockMovement[]
+  orderItems      OrderItem[]
+  purchaseItems   PurchaseItem[]
+
+  @@index([productId])
+  @@index([storeId])
+}
+
+model VariantAttributeValue {
+  variantId        String
+  variant          ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  attributeValueId String
+  attributeValue   AttributeValue @relation(fields: [attributeValueId], references: [id])
+
+  @@id([variantId, attributeValueId])
+}
+
+// --------------------------------------------------------------------------
+// ESTOQUE — histórico auditável de toda entrada/saída
+// --------------------------------------------------------------------------
+
+enum StockMovementType {
+  PURCHASE_IN // entrada por compra de fornecedor
+  SALE_OUT // saída por venda
+  RETURN_IN // devolução de cliente volta ao estoque
+  ADJUSTMENT // correção manual (perda, avaria, contagem)
+  TRANSFER // transferência entre lojas (futuro multi-loja)
+}
+
+model StockMovement {
+  id         String            @id @default(cuid())
+  variantId  String
+  variant    ProductVariant    @relation(fields: [variantId], references: [id])
+  type       StockMovementType
+  quantity   Int // sempre positivo; o "type" define se soma ou subtrai
+  reason     String?
+  userId     String?
+  user       User?             @relation(fields: [userId], references: [id])
+  referenceId String? // id do Order ou Purchase que originou o movimento
+  createdAt  DateTime          @default(now())
+
+  @@index([variantId])
+  @@index([type])
+}
+
+// --------------------------------------------------------------------------
+// COMPRAS (gasto com mercadoria/fornecedor)
+// --------------------------------------------------------------------------
+
+enum PurchaseStatus {
+  PENDING
+  RECEIVED
+  CANCELED
+}
+
+model Purchase {
+  id         String         @id @default(cuid())
+  supplierId String
+  supplier   Supplier       @relation(fields: [supplierId], references: [id])
+  storeId    String?
+  store      Store?         @relation(fields: [storeId], references: [id])
+  status     PurchaseStatus @default(PENDING)
+  totalCost  Decimal        @db.Decimal(10, 2)
+  notes      String?
+  orderedAt  DateTime       @default(now())
+  receivedAt DateTime?
+
+  items PurchaseItem[]
+
+  @@index([supplierId])
+}
+
+model PurchaseItem {
+  id         String         @id @default(cuid())
+  purchaseId String
+  purchase   Purchase       @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  variantId  String
+  variant    ProductVariant @relation(fields: [variantId], references: [id])
+  quantity   Int
+  unitCost   Decimal        @db.Decimal(10, 2)
+
+  @@index([purchaseId])
+}
+
+// --------------------------------------------------------------------------
+// CUPONS & BRINDES
+// --------------------------------------------------------------------------
+
+enum CouponType {
+  PERCENTAGE
+  FIXED
+}
+
+model Coupon {
+  id           String     @id @default(cuid())
+  code         String     @unique
+  type         CouponType
+  value        Decimal    @db.Decimal(10, 2) // % ou valor fixo, conforme "type"
+  minPurchase  Decimal?   @db.Decimal(10, 2)
+  maxUses      Int? // null = ilimitado
+  usedCount    Int        @default(0)
+  validFrom    DateTime   @default(now())
+  validUntil   DateTime?
+  active       Boolean    @default(true)
+
+  orders Order[]
+}
+
+model Gift {
+  id                String   @id @default(cuid())
+  name              String
+  description       String?
+  stockQuantity     Int      @default(0)
+  minPurchaseValue  Decimal? @db.Decimal(10, 2) // dá o brinde automaticamente a partir desse valor
+  minLoyaltyPoints  Int? // ou o cliente troca pontos de fidelidade pelo brinde
+  productId         String?  // brinde atrelado a um produto específico
+  product           Product? @relation(fields: [productId], references: [id])
+  categoryId        String?  // brinde atrelado a uma categoria específica
+  category          Category? @relation(fields: [categoryId], references: [id])
+  active            Boolean  @default(true)
+
+  orderGifts OrderGift[]
+
+  @@index([productId])
+  @@index([categoryId])
+}
+
+model OrderGift {
+  id       String @id @default(cuid())
+  orderId  String
+  order    Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  giftId   String
+  gift     Gift   @relation(fields: [giftId], references: [id])
+  quantity Int    @default(1)
+
+  @@index([orderId])
+}
+
+// --------------------------------------------------------------------------
+// VENDAS / PAGAMENTOS
+// --------------------------------------------------------------------------
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  COMPLETED
+  CANCELED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  PIX
+  CREDIT_CARD
+  DEBIT_CARD
+  CASH
+  BOLETO
+  STORE_CREDIT // crédito de loja (ex.: troca)
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  DENIED
+  REFUNDED
+}
+
+model Order {
+  id         String      @id @default(cuid())
+  customerId String?
+  customer   Customer?   @relation(fields: [customerId], references: [id])
+  sellerId   String?
+  seller     User?       @relation("SellerOrders", fields: [sellerId], references: [id])
+  storeId    String?
+  store      Store?      @relation(fields: [storeId], references: [id])
+  couponId   String?
+  coupon     Coupon?     @relation(fields: [couponId], references: [id])
+  status     OrderStatus @default(PENDING)
+  subtotal   Decimal     @db.Decimal(10, 2)
+  discount   Decimal     @db.Decimal(10, 2) @default(0)
+  total      Decimal     @db.Decimal(10, 2)
+  createdAt  DateTime    @default(now())
+
+  // Endereço de entrega: guardamos o endereço escolhido (addressId) e um
+  // snapshot do texto no momento do pedido, pra venda online continuar
+  // endereçável mesmo se o endereço do cliente for editado/apagado depois.
+  addressId          String?
+  address            Address?  @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  shippingRecipient  String?
+  shippingStreet     String?
+  shippingNumber     String?
+  shippingComplement String?
+  shippingDistrict   String?
+  shippingCity       String?
+  shippingState      String?
+  shippingZipCode    String?
+
+  items    OrderItem[]
+  payments Payment[]
+  gifts    OrderGift[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id        String         @id @default(cuid())
+  orderId   String
+  order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
+  quantity  Int
+  unitPrice Decimal        @db.Decimal(10, 2) // preço no momento da venda (não muda se o preço do produto mudar depois)
+  subtotal  Decimal        @db.Decimal(10, 2)
+
+  @@index([orderId])
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  orderId       String
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  method        PaymentMethod
+  amount        Decimal       @db.Decimal(10, 2)
+  installments  Int           @default(1)
+  status        PaymentStatus @default(PENDING)
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+
+  @@index([orderId])
+}
+
+// --------------------------------------------------------------------------
+// GASTOS GERAIS (fora de compra de mercadoria) — aluguel, marketing, etc.
+// --------------------------------------------------------------------------
+
+enum ExpenseCategory {
+  RENT
+  UTILITIES
+  MARKETING
+  SALARY
+  SOFTWARE
+  LOGISTICS
+  OTHER
+}
+
+model Expense {
+  id          String          @id @default(cuid())
+  storeId     String?
+  store       Store?          @relation(fields: [storeId], references: [id])
+  category    ExpenseCategory
+  description String
+  amount      Decimal         @db.Decimal(10, 2)
+  recurring   Boolean         @default(false) // ex.: aluguel mensal
+  dueDate     DateTime
+  paidAt      DateTime?
+  loggedById  String?
+  loggedBy    User?           @relation(fields: [loggedById], references: [id])
+
+  @@index([category])
+  @@index([dueDate])
+}
