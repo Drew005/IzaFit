@@ -3,20 +3,11 @@ import { compare } from "bcryptjs";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { signToken, verifyToken } from "@/lib/jwt";
 
-// Sessão stateless: guardamos o userId direto no cookie httpOnly.
-// Funciona no Edge (middleware) e sobrevive a restarts. Para produção,
-// troque por JWT assinado ou tabela Session no banco.
-
-// Estado inicial/retorno padrão das ações de autenticação.
-// Retornamos { error } em vez de "throw" para que o formulário mostre a
-// mensagem inline em vez de cair na página 500.
 type AuthState = { error: string } | null;
 
-export async function login(
-  prevState: AuthState | undefined,
-  formData: FormData
-): Promise<AuthState> {
+export async function login(prevState: AuthState | undefined, formData: FormData): Promise<AuthState> {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
   const password = formData.get("password") as string;
 
@@ -28,12 +19,18 @@ export async function login(
     return { error: "Credenciais inválidas." };
   }
 
-  cookies().set("session", user.id, {
+  const token = await signToken({
+    sub: user.id,
+    name: user.name,
+    role: user.role,
+  });
+
+  cookies().set("session", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24 * 7, // 1 semana
+    maxAge: 60 * 60 * 24 * 7,
   });
 
   redirect("/admin");
@@ -45,7 +42,13 @@ export async function logout() {
 }
 
 export async function getCurrentUser() {
-  const userId = cookies().get("session")?.value;
-  if (!userId) return null;
-  return prisma.user.findUnique({ where: { id: userId } });
+  const token = cookies().get("session")?.value;
+  if (!token) return null;
+  const payload = await verifyToken(token);
+  if (!payload) return null;
+  return { 
+    id: payload.sub as string, 
+    name: payload.name as string, 
+    role: payload.role as string 
+  };
 }

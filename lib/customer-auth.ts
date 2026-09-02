@@ -4,6 +4,7 @@ import { compare, hash } from "bcryptjs";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { signToken, verifyToken } from "@/lib/jwt";
 
 type AuthState = { error?: string; success?: string } | null;
 
@@ -13,12 +14,14 @@ function safeNext(value: FormDataEntryValue | null) {
 }
 
 function setCustomerSession(id: string) {
-  cookies().set("customer_session", id, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+  return signToken({ sub: id, type: "customer" }).then((token) => {
+    cookies().set("customer_session", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
   });
 }
 
@@ -40,7 +43,7 @@ export async function customerLogin(
     return { error: "Email ou senha inválidos." };
   }
 
-  setCustomerSession(customer.id);
+  await setCustomerSession(customer.id);
   redirect(next);
 }
 
@@ -74,7 +77,7 @@ export async function customerRegister(
     },
   });
 
-  setCustomerSession(customer.id);
+  await setCustomerSession(customer.id);
   redirect(next);
 }
 
@@ -84,11 +87,14 @@ export async function customerLogout() {
 }
 
 export async function getCurrentCustomer() {
-  const id = cookies().get("customer_session")?.value;
-  if (!id) return null;
+  const token = cookies().get("customer_session")?.value;
+  if (!token) return null;
+
+  const payload = await verifyToken(token);
+  if (!payload || payload.type !== "customer") return null;
 
   return prisma.customer.findUnique({
-    where: { id },
+    where: { id: payload.sub as string },
     select: {
       id: true,
       name: true,

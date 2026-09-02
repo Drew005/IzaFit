@@ -2,6 +2,7 @@ import Sidebar from "@/components/Sidebar";
 import { getCurrentUser } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import type { UserRole } from "@prisma/client";
 
 export default async function AdminLayout({
   children,
@@ -30,7 +31,7 @@ export default async function AdminLayout({
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar userName={user?.name ?? null} userRole={user.role} />
+      <Sidebar userName={user?.name ?? null} userRole={user.role as UserRole} />
       <main className="flex-1 min-w-0 p-6 md:p-10">{children}</main>
     </div>
   );

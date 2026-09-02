@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { uploadImage, deleteUploadedImages } from "@/lib/upload";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 import { parseProductDetails } from "@/lib/product-details";
 import { hash } from "bcryptjs";
 import { getCurrentUser } from "@/lib/auth";
@@ -18,17 +19,47 @@ import {
   StockMovementType,
 } from "@prisma/client";
 
+const ProductSchema = z.object({
+  name: z.string().min(1, "Nome é obrigatório"),
+  description: z.string().optional(),
+  categoryId: z.string().min(1, "Categoria é obrigatória"),
+  brand: z.string().optional(),
+  supplierId: z.string().optional(),
+  active: z.boolean().optional(),
+});
+
+const OrderSchema = z.object({
+  customerId: z.string().optional(),
+  couponCode: z.string().optional(),
+  paymentMethod: z.nativeEnum(PaymentMethod),
+  installments: z.preprocess((val) => Number(val), z.number().int().min(1)),
+  status: z.nativeEnum(OrderStatus),
+  variantIds: z.array(z.string()).min(1, "Selecione ao menos um produto"),
+  quantities: z.array(z.preprocess((val) => Number(val), z.number().int().min(1))),
+  unitPrices: z.array(z.preprocess((val) => Number(val), z.number().min(0))),
+  giftIds: z.array(z.string()).optional(),
+});
+
 // =============================================================================
 // PRODUTOS & VARIANTES
 // =============================================================================
 // Upload de imagens agora via Supabase Storage (ver lib/upload.ts).
 // =============================================================================
 export async function createProduct(formData: FormData) {
-  const name = formData.get("name") as string;
-  const description = (formData.get("description") as string) || null;
-  const categoryId = formData.get("categoryId") as string;
-  const brand = (formData.get("brand") as string) || null;
-  const supplierId = (formData.get("supplierId") as string) || null;
+  // — Validação —
+  const data = ProductSchema.safeParse({
+    name: formData.get("name"),
+    description: formData.get("description"),
+    categoryId: formData.get("categoryId"),
+    brand: formData.get("brand"),
+    supplierId: formData.get("supplierId"),
+  });
+
+  if (!data.success) {
+    throw new Error(data.error.issues[0]?.message ?? "Dados inválidos");
+  }
+
+  const { name, description, categoryId, brand, supplierId } = data.data;
   const details = parseProductDetails(formData.get("details"));
 
   // Variantes
@@ -37,10 +68,6 @@ export async function createProduct(formData: FormData) {
   const sellPriceList = formData.getAll("sellPrice") as string[];
   const stockQuantityList = formData.getAll("stockQuantity") as string[];
   const minStockAlertList = formData.getAll("minStockAlert") as string[];
-
-  if (!name || !categoryId) {
-    throw new Error("Nome e Categoria são obrigatórios.");
-  }
 
   // — Fotos —
   const coverFile = formData.get("image") as File | null;
@@ -115,12 +142,21 @@ export async function createProduct(formData: FormData) {
 }
 
 export async function updateProduct(id: string, formData: FormData) {
-  const name = formData.get("name") as string;
-  const description = (formData.get("description") as string) || null;
-  const categoryId = formData.get("categoryId") as string;
-  const brand = (formData.get("brand") as string) || null;
-  const supplierId = (formData.get("supplierId") as string) || null;
-  const active = formData.get("active") === "true";
+  // — Validação —
+  const data = ProductSchema.safeParse({
+    name: formData.get("name"),
+    description: formData.get("description"),
+    categoryId: formData.get("categoryId"),
+    brand: formData.get("brand"),
+    supplierId: formData.get("supplierId"),
+    active: formData.get("active") === "true",
+  });
+
+  if (!data.success) {
+    throw new Error(data.error.issues[0]?.message ?? "Dados inválidos");
+  }
+
+  const { name, description, categoryId, brand, supplierId, active } = data.data;
   const details = parseProductDetails(formData.get("details"));
 
   // — Fotos —
@@ -594,16 +630,27 @@ export async function deleteUser(id: string) {
 // =============================================================================
 
 export async function createOrder(formData: FormData) {
-  const customerId = (formData.get("customerId") as string) || null;
-  const couponCode = (formData.get("couponCode") as string) || null;
-  const paymentMethod = (formData.get("paymentMethod") as PaymentMethod) || PaymentMethod.PIX;
-  const installments = parseInt((formData.get("installments") as string) || "1", 10);
-  const status = (formData.get("status") as OrderStatus) || OrderStatus.PAID;
+  // — Validação —
+  const data = OrderSchema.safeParse({
+    customerId: formData.get("customerId") || undefined,
+    couponCode: formData.get("couponCode") || undefined,
+    paymentMethod: formData.get("paymentMethod"),
+    installments: formData.get("installments") || 1,
+    status: formData.get("status") || OrderStatus.PENDING,
+    variantIds: formData.getAll("variantId"),
+    quantities: formData.getAll("quantity"),
+    unitPrices: formData.getAll("unitPrice"),
+    giftIds: formData.getAll("giftId"),
+  });
 
-  const variantIds = formData.getAll("variantId") as string[];
-  const quantities = formData.getAll("quantity") as string[];
-  const unitPrices = formData.getAll("unitPrice") as string[];
-  const giftIds = formData.getAll("giftId") as string[];
+  if (!data.success) {
+    throw new Error(data.error.issues[0]?.message ?? "Dados inválidos");
+  }
+
+  const { 
+    customerId, couponCode, paymentMethod, installments, status, 
+    variantIds, quantities, unitPrices, giftIds 
+  } = data.data;
 
   if (!variantIds || variantIds.length === 0) {
     throw new Error("Selecione pelo menos um produto para a venda.");
@@ -615,8 +662,8 @@ export async function createOrder(formData: FormData) {
 
     for (let i = 0; i < variantIds.length; i++) {
       const vId = variantIds[i];
-      const qty = parseInt(quantities[i] || "1", 10);
-      const price = parseFloat(unitPrices[i] || "0");
+      const qty = quantities[i] ?? 1;
+      const price = unitPrices[i] ?? 0;
       const lineSubtotal = qty * price;
 
       subtotal += lineSubtotal;
@@ -712,7 +759,7 @@ export async function createOrder(formData: FormData) {
 
     // Dedupe: brinde auto-elegível não deve se repetir com o manual.
     const selectedGiftIds = Array.from(
-      new Set([...giftIds, ...targetedGifts.map((g) => g.id)])
+      new Set([...(giftIds ?? []), ...targetedGifts.map((g) => g.id)])
     );
 
     if (selectedGiftIds.length > 0) {
