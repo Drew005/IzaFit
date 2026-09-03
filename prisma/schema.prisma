@@ -70,12 +70,14 @@ model User {
 
 // Loja/filial. Hoje é 1 registro só, mas já modelado pra expandir.
 model Store {
-  id        String   @id @default(cuid())
-  name      String
-  cnpj      String?  @unique
-  phone     String?
-  address   String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  name        String
+  cnpj        String?  @unique
+  phone       String?
+  address     String?
+  logoUrl     String?  // URL da logo da loja (Supabase Storage)
+  heroSlides  Json?    // Array de { image: string; alt: string; href?: string }
+  createdAt   DateTime @default(now())
 
   users      User[]
   orders     Order[]

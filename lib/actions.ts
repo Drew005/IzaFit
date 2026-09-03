@@ -725,27 +725,25 @@ export async function createOrder(formData: FormData) {
       const qty = quantities[i] ?? 1;
       const price = unitPrices[i] ?? 0;
 
-      // Preço final após desconto automático.
-      let appliedPrice = price;
-      let appliedDiscountId: string | null = null;
+      // Preço base real da variação (usado para calcular o desconto).
       const ctx = variantCtxById.get(vId);
+      const originalPrice = ctx ? Number(ctx.sellPrice) : price;
+
+      // Preço final após desconto automático.
+      let appliedPrice = originalPrice;
       if (ctx && activeDiscounts.length > 0) {
-        const original = Number(ctx.sellPrice);
-        const best = findBestDiscount(original, {
+        const best = findBestDiscount(originalPrice, {
           variantId: vId,
           productId: ctx.product.id,
           categoryId: ctx.product.categoryId,
         }, activeDiscounts);
-        if (best) {
-          appliedPrice = best.finalPrice;
-          appliedDiscountId = best.discountId;
-        }
+        if (best) appliedPrice = best.finalPrice;
       }
 
       const lineSubtotal = qty * appliedPrice;
 
       subtotal += lineSubtotal;
-      totalDiscounts += qty * (price - appliedPrice);
+      totalDiscounts += qty * (originalPrice - appliedPrice);
       itemsData.push({
         variantId: vId,
         quantity: qty,
