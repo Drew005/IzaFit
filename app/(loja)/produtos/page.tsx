@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SlidersHorizontal } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { getActiveDiscounts, computeVariantDiscount } from "@/lib/discounts";
 import ProductCard from "@/components/store/ProductCard";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +52,30 @@ export default async function ProdutosPage({
       _sum: { quantity: true },
     }),
   ]);
+
+  // Descontos automáticos: mapa variantId -> { originalPrice, finalPrice }.
+  const activeDiscounts = await getActiveDiscounts();
+  const discountByVariant = new Map<
+    string,
+    { originalPrice: number; finalPrice: number; discountName: string | null }
+  >();
+  for (const p of products) {
+    for (const v of p.variants) {
+      const original = Number(v.sellPrice);
+      const result = computeVariantDiscount(
+        original,
+        { variantId: v.id, productId: p.id, categoryId: p.categoryId },
+        activeDiscounts
+      );
+      if (result) {
+        discountByVariant.set(v.id, {
+          originalPrice: original,
+          finalPrice: result.finalPrice,
+          discountName: result.discountName,
+        });
+      }
+    }
+  }
 
   const soldByVariant = new Map(
     bestSellerTotals.map((item) => [item.variantId, item._sum.quantity ?? 0])
@@ -158,9 +183,17 @@ export default async function ProdutosPage({
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-              {sortedProducts.map((p) => (
-                <ProductCard key={p.id} product={p} />
-              ))}
+              {sortedProducts.map((p) => {
+                const pDiscounts: Record<
+                  string,
+                  { originalPrice: number; finalPrice: number; discountName: string | null }
+                > = {};
+                for (const v of p.variants) {
+                  const d = discountByVariant.get(v.id);
+                  if (d) pDiscounts[v.id] = d;
+                }
+                return <ProductCard key={p.id} product={p} discountById={pDiscounts} />;
+              })}
             </div>
           )}
         </div>

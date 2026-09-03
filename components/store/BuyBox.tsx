@@ -18,14 +18,24 @@ export default function BuyBox({
   productName,
   imageUrl,
   variants,
+  discountById,
 }: {
   productId: string;
   productName: string;
   imageUrl: string | null;
   variants: BuyBoxVariant[];
+  // Mapa variantId -> { originalPrice, finalPrice, discountId, discountName }
+  discountById?: Record<
+    string,
+    { originalPrice: number; finalPrice: number; discountId: string | null; discountName: string | null }
+  >;
 }) {
   const { add } = useCart();
   const { isFavorite, toggle } = useFavorites();
+
+  // Preço efetivo (com desconto) para exibição e adição ao carrinho.
+  const effectivePrice = (v: BuyBoxVariant) =>
+    discountById?.[v.id]?.finalPrice ?? v.sellPrice;
 
   const inStock = variants.filter((v) => v.stockQuantity > 0);
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -39,6 +49,7 @@ export default function BuyBox({
 
   const handleAdd = () => {
     if (!selected) return;
+    const price = effectivePrice(selected);
     add(
       {
         key: selected.id,
@@ -47,7 +58,7 @@ export default function BuyBox({
         name: productName,
         sku: selected.sku,
         imageUrl,
-        price: selected.sellPrice,
+        price,
         maxStock,
       },
       qty
@@ -83,7 +94,7 @@ export default function BuyBox({
                   title={
                     out
                       ? `${v.sku} — sem estoque`
-                      : `${v.sku} · ${currency(v.sellPrice)} · ${v.stockQuantity} em estoque`
+                      : `${v.sku} · ${currency(effectivePrice(v))} · ${v.stockQuantity} em estoque`
                   }
                   className={`rounded-sm border px-3 py-1.5 text-sm transition-colors ${
                     out
@@ -111,7 +122,7 @@ export default function BuyBox({
             id: productId,
             name: productName,
             imageUrl,
-            price: variants.length ? Math.min(...variants.map((v) => v.sellPrice)) : null,
+            price: variants.length ? Math.min(...variants.map((v) => effectivePrice(v))) : null,
           })
         }
         className={`mt-4 inline-flex items-center gap-2 rounded-sm border px-3 py-2 text-sm transition-colors ${
@@ -123,6 +134,21 @@ export default function BuyBox({
         <Heart size={15} fill={isFavorite(productId) ? "currentColor" : "none"} />
         {isFavorite(productId) ? "Salvo nos favoritos" : "Adicionar aos favoritos"}
       </button>
+
+      {/* Desconto ativo na variação selecionada */}
+      {selected &&
+        discountById?.[selected.id] &&
+        discountById[selected.id].finalPrice < discountById[selected.id].originalPrice && (
+          <div className="mt-4 rounded-sm border border-volt/30 bg-volt/5 px-3 py-2 text-sm">
+            <p className="font-medium text-volt">
+              {discountById[selected.id].discountName ?? "Promoção ativa"}
+            </p>
+            <p className="text-ink-soft">
+              De <span className="line-through">{currency(discountById[selected.id].originalPrice)}</span>{" "}
+              por <span className="font-medium text-ink">{currency(discountById[selected.id].finalPrice)}</span>
+            </p>
+          </div>
+        )}
 
       {/* Quantidade + carrinho */}
       <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -161,7 +187,7 @@ export default function BuyBox({
             <>
               <ShoppingBag size={16} />
               {selected && selected.stockQuantity > 0
-                ? `Adicionar por ${currency(selected.sellPrice)}`
+                ? `Adicionar por ${currency(effectivePrice(selected))}`
                 : "Produto esgotado"}
             </>
           )}

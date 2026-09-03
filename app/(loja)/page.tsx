@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Sparkles, ArrowRight, Truck, ShieldCheck, RotateCcw } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { getActiveDiscounts, computeVariantDiscount } from "@/lib/discounts";
 import ProductCard from "@/components/store/ProductCard";
 import HeroCarousel from "@/components/store/HeroCarousel";
 
@@ -11,7 +12,9 @@ export default async function HomePage() {
     prisma.product.findMany({
       where: { active: true },
       include: {
-        variants: { select: { sellPrice: true, stockQuantity: true } },
+        variants: {
+          select: { id: true, sellPrice: true, stockQuantity: true },
+        },
         category: { select: { name: true } },
       },
       take: 8,
@@ -21,6 +24,44 @@ export default async function HomePage() {
       orderBy: { name: "asc" },
     }),
   ]);
+
+  // Descontos automáticos para os cards em destaque.
+  const activeDiscounts = await getActiveDiscounts();
+  const discountByVariant = new Map<
+    string,
+    { originalPrice: number; finalPrice: number; discountName: string | null }
+  >();
+  for (const p of featured) {
+    for (const v of p.variants) {
+      const original = Number(v.sellPrice);
+      const result = computeVariantDiscount(
+        original,
+        { variantId: v.id, productId: p.id, categoryId: p.categoryId },
+        activeDiscounts
+      );
+      if (result) {
+        discountByVariant.set(v.id, {
+          originalPrice: original,
+          finalPrice: result.finalPrice,
+          discountName: result.discountName,
+        });
+      }
+    }
+  }
+
+  const featuredDiscounts = new Map(
+    featured.map((p) => {
+      const map: Record<
+        string,
+        { originalPrice: number; finalPrice: number; discountName: string | null }
+      > = {};
+      for (const v of p.variants) {
+        const d = discountByVariant.get(v.id);
+        if (d) map[v.id] = d;
+      }
+      return [p.id, map] as const;
+    })
+  );
 
   return (
     <div>
@@ -91,7 +132,12 @@ export default async function HomePage() {
         ) : (
           <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
             {featured.map((p, i) => (
-              <ProductCard key={p.id} product={p} priority={i < 4} />
+              <ProductCard
+                key={p.id}
+                product={p}
+                priority={i < 4}
+                discountById={featuredDiscounts.get(p.id)}
+              />
             ))}
           </div>
         )}

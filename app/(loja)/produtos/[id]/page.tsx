@@ -4,6 +4,7 @@ import { ArrowLeft, Check, Truck, ShieldCheck, RotateCcw } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { currency } from "@/lib/format";
 import { parseProductDetails } from "@/lib/product-details";
+import { getActiveDiscounts, computeVariantDiscount } from "@/lib/discounts";
 import ProductGallery from "@/components/store/ProductGallery";
 import BuyBox from "@/components/store/BuyBox";
 
@@ -31,9 +32,37 @@ export default async function ProdutoDetalhePage({
 
   const inStockVariants = product.variants.filter((v) => v.stockQuantity > 0);
   const hasStock = inStockVariants.length > 0;
+
+  // Descontos automáticos por variação.
+  const activeDiscounts = await getActiveDiscounts();
+  const discountById: Record<
+    string,
+    { originalPrice: number; finalPrice: number; discountId: string | null; discountName: string | null }
+  > = {};
+  for (const v of product.variants) {
+    const original = Number(v.sellPrice);
+    const result = computeVariantDiscount(
+      original,
+      { variantId: v.id, productId: product.id, categoryId: product.categoryId },
+      activeDiscounts
+    );
+    if (result) {
+      discountById[v.id] = {
+        originalPrice: original,
+        finalPrice: result.finalPrice,
+        discountId: result.discountId,
+        discountName: result.discountName,
+      };
+    }
+  }
+
   const minPrice =
     product.variants.length > 0
       ? Math.min(...product.variants.map((v) => Number(v.sellPrice)))
+      : null;
+  const minDiscounted =
+    product.variants.length > 0
+      ? Math.min(...product.variants.map((v) => (discountById[v.id]?.finalPrice ?? Number(v.sellPrice))))
       : null;
   const maxPrice =
     product.variants.length > 0
@@ -49,11 +78,18 @@ export default async function ProdutoDetalhePage({
   );
 
   const priceLabel =
-    minPrice !== null && maxPrice !== null && maxPrice > minPrice
-      ? `${currency(minPrice)} – ${currency(maxPrice)}`
-      : minPrice !== null
-        ? currency(minPrice)
-        : null;
+    minDiscounted !== null && minDiscounted !== null
+      ? (() => {
+          const hasDiscount = minDiscounted !== null && minDiscounted < (minPrice ?? 0);
+          return hasDiscount
+            ? `${currency(minDiscounted)}`
+            : minPrice !== null && maxPrice !== null && maxPrice > minPrice
+              ? `${currency(minPrice)} – ${currency(maxPrice)}`
+              : minPrice !== null
+                ? currency(minPrice)
+                : null;
+        })()
+      : null;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
@@ -93,7 +129,21 @@ export default async function ProdutoDetalhePage({
 
           <div className="mt-6 rounded-md border border-base-line bg-base-raised p-5">
             {priceLabel ? (
-              <p className="font-display text-3xl text-volt">{priceLabel}</p>
+              <>
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  {minPrice !== null && minDiscounted !== null && minDiscounted < minPrice && (
+                    <span className="line-through text-ink-soft">
+                      {currency(minPrice)}
+                    </span>
+                  )}
+                  <p className="font-display text-3xl text-volt">{priceLabel}</p>
+                </div>
+                {minPrice !== null && minDiscounted !== null && minDiscounted < minPrice && (
+                  <p className="mt-1 text-sm text-volt">
+                    {Math.round((1 - minDiscounted / minPrice) * 100)}% off com promoção automática
+                  </p>
+                )}
+              </>
             ) : (
               <p className="text-lg text-ink-soft">Consultar disponibilidade</p>
             )}
@@ -122,6 +172,7 @@ export default async function ProdutoDetalhePage({
               sellPrice: Number(v.sellPrice),
               stockQuantity: v.stockQuantity,
             }))}
+            discountById={discountById}
           />
 
           {/* Garantias */}

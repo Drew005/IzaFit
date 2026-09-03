@@ -629,6 +629,48 @@ export async function deleteUser(id: string) {
 // VENDAS (ORDERS)
 // =============================================================================
 
+// Aplica o melhor desconto automático (por variante/produto/categoria) a um
+// preço. Retorna o menor preço final entre todos os descontos que se aplicam.
+function findBestDiscount(
+  originalPrice: number,
+  context: { variantId: string; productId: string; categoryId: string | null },
+  discounts: {
+    id: string;
+    type: CouponType;
+    value: { toString(): string } | number;
+    variantId: string | null;
+    productId: string | null;
+    categoryId: string | null;
+  }[]
+): { finalPrice: number; discountId: string | null } | null {
+  const relevant = discounts.filter((d) => {
+    if (d.variantId) return d.variantId === context.variantId;
+    if (d.productId) return d.productId === context.productId;
+    if (d.categoryId) return d.categoryId !== null && d.categoryId === context.categoryId;
+    return false;
+  });
+
+  if (relevant.length === 0) return null;
+
+  let bestFinal = originalPrice;
+  let bestId: string | null = null;
+
+  for (const d of relevant) {
+    const value = Number(d.value);
+    const final =
+      d.type === CouponType.PERCENTAGE
+        ? originalPrice * (1 - value / 100)
+        : Math.max(0, originalPrice - value);
+    if (final < bestFinal) {
+      bestFinal = final;
+      bestId = d.id;
+    }
+  }
+
+  if (bestFinal >= originalPrice) return null;
+  return { finalPrice: bestFinal, discountId: bestId };
+}
+
 export async function createOrder(formData: FormData) {
   // — Validação —
   const data = OrderSchema.safeParse({
@@ -658,19 +700,56 @@ export async function createOrder(formData: FormData) {
 
   await prisma.$transaction(async (tx) => {
     let subtotal = 0;
+    let totalDiscounts = 0;
     const itemsData = [];
+
+    // Descontos automáticos ativos (por produto/categoria/variação).
+    const activeDiscounts = await tx.discount.findMany({
+      where: {
+        active: true,
+        OR: [{ validUntil: null }, { validUntil: { gte: new Date() } }],
+      },
+    });
+
+    // Contexto de cada variação (produto + categoria) para o cálculo de desconto.
+    const variantContexts = await tx.productVariant.findMany({
+      where: { id: { in: variantIds } },
+      include: { product: { select: { id: true, categoryId: true } } },
+    });
+    const variantCtxById = new Map(
+      variantContexts.map((v) => [v.id, v])
+    );
 
     for (let i = 0; i < variantIds.length; i++) {
       const vId = variantIds[i];
       const qty = quantities[i] ?? 1;
       const price = unitPrices[i] ?? 0;
-      const lineSubtotal = qty * price;
+
+      // Preço final após desconto automático.
+      let appliedPrice = price;
+      let appliedDiscountId: string | null = null;
+      const ctx = variantCtxById.get(vId);
+      if (ctx && activeDiscounts.length > 0) {
+        const original = Number(ctx.sellPrice);
+        const best = findBestDiscount(original, {
+          variantId: vId,
+          productId: ctx.product.id,
+          categoryId: ctx.product.categoryId,
+        }, activeDiscounts);
+        if (best) {
+          appliedPrice = best.finalPrice;
+          appliedDiscountId = best.discountId;
+        }
+      }
+
+      const lineSubtotal = qty * appliedPrice;
 
       subtotal += lineSubtotal;
+      totalDiscounts += qty * (price - appliedPrice);
       itemsData.push({
         variantId: vId,
         quantity: qty,
-        unitPrice: price,
+        unitPrice: appliedPrice,
         subtotal: lineSubtotal,
       });
 
@@ -696,7 +775,7 @@ export async function createOrder(formData: FormData) {
       }
     }
 
-    let discount = 0;
+    let couponDiscount = 0;
     let couponId: string | null = null;
 
     if (couponCode) {
@@ -707,9 +786,9 @@ export async function createOrder(formData: FormData) {
       if (coupon && coupon.active) {
         couponId = coupon.id;
         if (coupon.type === CouponType.PERCENTAGE) {
-          discount = subtotal * (Number(coupon.value) / 100);
+          couponDiscount = subtotal * (Number(coupon.value) / 100);
         } else {
-          discount = Math.min(Number(coupon.value), subtotal);
+          couponDiscount = Math.min(Number(coupon.value), subtotal);
         }
 
         await tx.coupon.update({
@@ -719,7 +798,9 @@ export async function createOrder(formData: FormData) {
       }
     }
 
-    const total = Math.max(0, subtotal - discount);
+    // Desconto total = descontos automáticos + cupom.
+    const discount = totalDiscounts + couponDiscount;
+    const total = Math.max(0, subtotal - couponDiscount);
 
     const order = await tx.order.create({
       data: {

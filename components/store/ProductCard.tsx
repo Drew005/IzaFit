@@ -6,6 +6,7 @@ import FavoriteButton from "@/components/store/FavoriteButton";
 // Tipo mínimo esperado de um produto no card da loja.
 // sellPrice aceita number ou o Decimal do Prisma (que tem toString()).
 export type StoreVariant = {
+  id?: string;
   sellPrice: number | { toString(): string };
   stockQuantity: number;
 };
@@ -18,17 +19,38 @@ export type StoreProduct = {
   category?: { name: string } | null;
   variants: StoreVariant[];
 };
+
 export default function ProductCard({
   product,
   priority = false,
+  discountById,
 }: {
   product: StoreProduct;
   priority?: boolean;
+  // Mapa variantId -> preço com desconto (opcional, vindo da página).
+  discountById?: Record<
+    string,
+    { originalPrice: number; finalPrice: number; discountName: string | null }
+  >;
 }) {
   const minPrice =
     product.variants.length > 0
       ? Math.min(...product.variants.map((v) => Number(v.sellPrice)))
       : null;
+  // Menor preço com desconto entre as variações.
+  const minDiscounted =
+    product.variants.length > 0
+      ? Math.min(
+          ...product.variants.map((v) => {
+            const d = v.id ? discountById?.[v.id] : null;
+            return d?.finalPrice ?? Number(v.sellPrice);
+          })
+        )
+      : null;
+  const hasDiscount =
+    minDiscounted !== null &&
+    minPrice !== null &&
+    minDiscounted < minPrice;
   const hasStock =
     product.variants.length > 0 &&
     product.variants.some((v) => v.stockQuantity > 0);
@@ -60,11 +82,17 @@ export default function ProductCard({
             Esgotado
           </span>
         )}
+        {hasDiscount && hasStock && (
+          <span className="absolute right-3 bottom-3 rounded-sm bg-volt px-2 py-0.5 text-[11px] font-bold text-base">
+            -
+            {Math.round((1 - (minDiscounted ?? 0) / (minPrice ?? 1)) * 100)}%
+          </span>
+        )}
         <FavoriteButton
           productId={product.id}
           name={product.name}
           imageUrl={productImage}
-          price={minPrice}
+          price={minDiscounted ?? minPrice}
         />
       </div>
 
@@ -78,7 +106,18 @@ export default function ProductCard({
         </h3>
         <div className="mt-auto pt-3">
           {minPrice !== null ? (
-            <p className="font-display text-lg text-ink">{currency(minPrice)}</p>
+            <div>
+              {hasDiscount ? (
+                <p className="text-xs text-volt font-medium">
+                  {currency(minDiscounted)}
+                  <span className="ml-2 line-through text-ink-soft/60">
+                    {currency(minPrice)}
+                  </span>
+                </p>
+              ) : (
+                <p className="font-display text-lg text-ink">{currency(minPrice)}</p>
+              )}
+            </div>
           ) : (
             <p className="text-sm text-ink-soft">Consultar</p>
           )}
