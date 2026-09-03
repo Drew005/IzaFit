@@ -64,67 +64,67 @@ export default async function DescontosPage() {
         />
 
         <div className="rounded-md border border-base-line bg-base-raised overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-ink-soft border-b border-base-line">
-                <th className="px-5 py-3 font-normal">Nome</th>
-                <th className="px-5 py-3 font-normal">Alvo</th>
-                <th className="px-5 py-3 font-normal">Tipo</th>
-                <th className="px-5 py-3 font-normal">Valor</th>
-                <th className="px-5 py-3 font-normal">Validade</th>
-                <th className="px-5 py-3 font-normal">Status</th>
-                <th className="px-5 py-3 font-normal text-right">Ação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {discounts.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-5 py-8 text-center text-ink-soft">
-                    Nenhum desconto cadastrado.
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[620px]">
+              <thead>
+                <tr className="text-left text-xs text-ink-soft border-b border-base-line">
+                  <th className="px-5 py-3 font-normal">Nome</th>
+                  <th className="px-5 py-3 font-normal">Alvo</th>
+                  <th className="px-5 py-3 font-normal">Tipo</th>
+                  <th className="px-5 py-3 font-normal">Valor</th>
+                  <th className="px-5 py-3 font-normal">Validade</th>
+                  <th className="px-5 py-3 font-normal">Status</th>
+                  <th className="px-5 py-3 font-normal text-right">Ação</th>
                 </tr>
-              ) : (
-                discounts.map((d) => {
-                  let status: "Ativo" | "Agendado" | "Expirado" | "Inativo" = "Ativo";
-                  if (!d.active) {
-                    status = "Inativo";
-                  } else if (d.validUntil && new Date(d.validUntil) < now) {
-                    status = "Expirado";
-                  }
+              </thead>
+              <tbody>
+                {discounts.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-8 text-center text-ink-soft">
+                      Nenhum desconto cadastrado.
+                    </td>
+                  </tr>
+                ) : (
+                  discounts.map((d) => {
+                    let status: "Ativo" | "Agendado" | "Expirado" | "Inativo" = "Ativo";
+                    if (!d.active) {
+                      status = "Inativo";
+                    } else if (d.validUntil && new Date(d.validUntil) < now) {
+                      status = "Expirado";
+                    }
 
-                  const tipo = d.type === "PERCENTAGE" ? "Percentual" : "Fixo";
-                  const valor =
-                    d.type === "PERCENTAGE"
-                      ? `${Number(d.value)}%`
-                      : currency(Number(d.value));
-                  const validade = d.validUntil
-                    ? new Intl.DateTimeFormat("pt-BR").format(new Date(d.validUntil))
-                    : "sem prazo";
+                    const tipo = d.type === "PERCENTAGE" ? "Percentual" : "Fixo";
+                    const valor =
+                      d.type === "PERCENTAGE"
+                        ? `${Number(d.value)}%`
+                        : currency(Number(d.value));
+                    const validade = d.validUntil
+                      ? new Intl.DateTimeFormat("pt-BR").format(new Date(d.validUntil))
+                      : "sem prazo";
 
-                  return (
-                    <tr
-                      key={d.id}
-                      className="border-b border-base-line/60 last:border-0 hover:bg-base/40"
-                    >
-                      <td className="px-5 py-3 text-ink font-medium">
-                        <Link
-                          href={`/admin/descontos/${d.id}/editar`}
-                          className="hover:text-volt transition-colors"
-                        >
-                          {d.name}
-                        </Link>
-                      </td>
-                      <td className="px-5 py-3 text-ink-soft">{targetLabel(d)}</td>
-                      <td className="px-5 py-3 text-ink-soft">{tipo}</td>
-                      <td className="px-5 py-3 text-ink">{valor}</td>
-                      <td className="px-5 py-3 text-ink-soft">{validade}</td>
-                      <td className="px-5 py-3">
-                        <StatusPill tone={discountTone[status] ?? "muted"}>
-                          {status}
-                        </StatusPill>
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                    return (
+                      <tr
+                        key={d.id}
+                        className="border-b border-base-line/60 last:border-0 hover:bg-base/40"
+                      >
+                        <td className="px-5 py-3 text-ink font-medium">
+                          <Link
+                            href={`/admin/descontos/${d.id}/editar`}
+                            className="hover:text-volt transition-colors"
+                          >
+                            {d.name}
+                          </Link>
+                        </td>
+                        <td className="px-5 py-3 text-ink-soft">{targetLabel(d)}</td>
+                        <td className="px-5 py-3 text-ink-soft">{tipo}</td>
+                        <td className="px-5 py-3 text-ink font-medium">{valor}</td>
+                        <td className="px-5 py-3 text-ink-soft">{validade}</td>
+                        <td className="px-5 py-3">
+                          <StatusPill tone={discountTone[status]}>
+                            {status}
+                          </StatusPill>
+                        </td>
+                        <td className="px-5 py-3 text-right">
                           <Link
                             href={`/admin/descontos/${d.id}/editar`}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-base-line bg-base text-xs text-ink-soft hover:text-ink hover:border-volt/60 transition-colors"
@@ -132,23 +132,14 @@ export default async function DescontosPage() {
                             <Edit2 size={13} />
                             Editar
                           </Link>
-                          <form action={deleteDiscount.bind(null, d.id)}>
-                            <button
-                              type="submit"
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-base-line bg-base text-xs text-ink-soft hover:text-alert hover:border-alert/50 transition-colors"
-                              title="Excluir desconto"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </form>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 

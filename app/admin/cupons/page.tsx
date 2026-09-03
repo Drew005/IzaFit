@@ -51,83 +51,85 @@ export default async function CuponsPage() {
         />
 
         <div className="rounded-md border border-base-line bg-base-raised overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-ink-soft border-b border-base-line">
-                <th className="px-5 py-3 font-normal">Código</th>
-                <th className="px-5 py-3 font-normal">Tipo</th>
-                <th className="px-5 py-3 font-normal">Valor</th>
-                <th className="px-5 py-3 font-normal">Usos</th>
-                <th className="px-5 py-3 font-normal">Validade</th>
-                <th className="px-5 py-3 font-normal">Status</th>
-                <th className="px-5 py-3 font-normal text-right">Ação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {coupons.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-5 py-8 text-center text-ink-soft">
-                    Nenhum cupom cadastrado.
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[620px]">
+              <thead>
+                <tr className="text-left text-xs text-ink-soft border-b border-base-line">
+                  <th className="px-5 py-3 font-normal">Código</th>
+                  <th className="px-5 py-3 font-normal">Tipo</th>
+                  <th className="px-5 py-3 font-normal">Valor</th>
+                  <th className="px-5 py-3 font-normal">Usos</th>
+                  <th className="px-5 py-3 font-normal">Validade</th>
+                  <th className="px-5 py-3 font-normal">Status</th>
+                  <th className="px-5 py-3 font-normal text-right">Ação</th>
                 </tr>
-              ) : (
-                coupons.map((c) => {
-                  let status: "Ativo" | "Agendado" | "Expirado" = "Ativo";
-                  if (!c.active) {
-                    status = "Expirado";
-                  } else if (new Date(c.validFrom) > now) {
-                    status = "Agendado";
-                  } else if (c.validUntil && new Date(c.validUntil) < now) {
-                    status = "Expirado";
-                  }
+              </thead>
+              <tbody>
+                {coupons.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-8 text-center text-ink-soft">
+                      Nenhum cupom cadastrado.
+                    </td>
+                  </tr>
+                ) : (
+                  coupons.map((c) => {
+                    let status: "Ativo" | "Agendado" | "Expirado" = "Ativo";
+                    if (!c.active) {
+                      status = "Expirado";
+                    } else if (new Date(c.validFrom) > now) {
+                      status = "Agendado";
+                    } else if (c.validUntil && new Date(c.validUntil) < now) {
+                      status = "Expirado";
+                    }
 
-                  const tipo = c.type === "PERCENTAGE" ? "Percentual" : "Fixo";
-                  const valor =
-                    c.type === "PERCENTAGE"
-                      ? `${Number(c.value)}%`
-                      : currency(Number(c.value));
-                  const usos = `${c.usedCount}/${c.maxUses ?? "∞"}`;
-                  const validade = c.validUntil
-                    ? new Intl.DateTimeFormat("pt-BR").format(new Date(c.validUntil))
-                    : "sem prazo";
+                    const tipo = c.type === "PERCENTAGE" ? "Percentual" : "Fixo";
+                    const valor =
+                      c.type === "PERCENTAGE"
+                        ? `${Number(c.value)}%`
+                        : currency(Number(c.value));
+                    const usos = `${c.usedCount}/${c.maxUses ?? "∞"}`;
+                    const validade = c.validUntil
+                      ? new Intl.DateTimeFormat("pt-BR").format(new Date(c.validUntil))
+                      : "sem prazo";
 
-                  return (
-                    <tr
-                      key={c.id}
-                      className="border-b border-base-line/60 last:border-0 hover:bg-base/40"
-                    >
-                      <td className="px-5 py-3 text-ink font-medium">
-                        <Link
-                          href={`/admin/cupons/${c.id}/editar`}
-                          className="hover:text-volt transition-colors font-mono"
-                        >
-                          {c.code}
-                        </Link>
-                      </td>
-                      <td className="px-5 py-3 text-ink-soft">{tipo}</td>
-                      <td className="px-5 py-3 text-ink">{valor}</td>
-                      <td className="px-5 py-3 text-ink-soft">{usos}</td>
-                      <td className="px-5 py-3 text-ink-soft">{validade}</td>
-                      <td className="px-5 py-3">
-                        <StatusPill tone={couponTone[status] ?? "muted"}>
-                          {status}
-                        </StatusPill>
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        <Link
-                          href={`/admin/cupons/${c.id}/editar`}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-base-line bg-base text-xs text-ink-soft hover:text-ink hover:border-volt/60 transition-colors"
-                        >
-                          <Edit2 size={13} />
-                          Editar
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                    return (
+                      <tr
+                        key={c.id}
+                        className="border-b border-base-line/60 last:border-0 hover:bg-base/40"
+                      >
+                        <td className="px-5 py-3 text-ink font-mono font-medium">
+                          <Link
+                            href={`/admin/cupons/${c.id}/editar`}
+                            className="hover:text-volt transition-colors"
+                          >
+                            {c.code}
+                          </Link>
+                        </td>
+                        <td className="px-5 py-3 text-ink-soft">{tipo}</td>
+                        <td className="px-5 py-3 text-ink font-medium">{valor}</td>
+                        <td className="px-5 py-3 text-ink-soft">{usos}</td>
+                        <td className="px-5 py-3 text-ink-soft">{validade}</td>
+                        <td className="px-5 py-3">
+                          <StatusPill tone={couponTone[status]}>
+                            {status}
+                          </StatusPill>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <Link
+                            href={`/admin/cupons/${c.id}/editar`}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-base-line bg-base text-xs text-ink-soft hover:text-ink hover:border-volt/60 transition-colors"
+                          >
+                            <Edit2 size={13} />
+                            Editar
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 

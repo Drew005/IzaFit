@@ -65,59 +65,64 @@ export default async function EstoquePage() {
           <div className="px-5 py-4 border-b border-base-line">
             <h2 className="text-sm font-medium text-ink">Movimentações recentes</h2>
           </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-ink-soft border-b border-base-line">
-                <th className="px-5 py-3 font-normal">Data</th>
-                <th className="px-5 py-3 font-normal">Item</th>
-                <th className="px-5 py-3 font-normal">Tipo</th>
-                <th className="px-5 py-3 font-normal text-right">Qtd.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stockMovements.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-5 py-8 text-center text-ink-soft">
-                    Nenhuma movimentação registrada.
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[500px]">
+              <thead>
+                <tr className="text-left text-xs text-ink-soft border-b border-base-line">
+                  <th className="px-5 py-3 font-normal">Data</th>
+                  <th className="px-5 py-3 font-normal">Item</th>
+                  <th className="px-5 py-3 font-normal">Tipo</th>
+                  <th className="px-5 py-3 font-normal text-right">Qtd.</th>
                 </tr>
-              ) : (
-                stockMovements.map((m) => {
-                  const attrs = m.variant.attributeValues
-                    .map((av) => av.attributeValue.value)
-                    .join(" / ");
-                  const itemName = attrs
-                    ? `${m.variant.product.name} ${attrs}`
-                    : m.variant.product.name;
-                  const displayQty =
-                    m.type === "SALE_OUT" ? -Math.abs(m.quantity) : m.quantity;
-                  const dateStr = new Intl.DateTimeFormat("pt-BR", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  }).format(new Date(m.createdAt));
+              </thead>
+              <tbody>
+                {stockMovements.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-5 py-8 text-center text-ink-soft">
+                      Nenhuma movimentação registrada.
+                    </td>
+                  </tr>
+                ) : (
+                  stockMovements.map((m) => {
+                    const attrs = m.variant.attributeValues
+                      .map((av) => av.attributeValue.value)
+                      .join(" / ");
+                    const itemName = attrs
+                      ? `${m.variant.product.name} ${attrs}`
+                      : m.variant.product.name;
+                    const displayQty =
+                      m.type === "SALE_OUT" ? -Math.abs(m.quantity) : m.quantity;
+                    const dateStr = new Intl.DateTimeFormat("pt-BR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }).format(new Date(m.createdAt));
 
-                  return (
-                    <tr key={m.id} className="border-b border-base-line/60 last:border-0">
-                      <td className="px-5 py-3 text-ink-soft">{dateStr}</td>
-                      <td className="px-5 py-3 text-ink">{itemName}</td>
-                      <td className="px-5 py-3 text-ink-soft">
-                        {movementTypeLabels[m.type] ?? m.type}
-                      </td>
-                      <td
-                        className={`px-5 py-3 text-right font-medium ${
-                          displayQty < 0 ? "text-alert" : "text-volt"
-                        }`}
+                    return (
+                      <tr
+                        key={m.id}
+                        className="border-b border-base-line/60 last:border-0 hover:bg-base/40"
                       >
-                        {displayQty > 0 ? `+${displayQty}` : displayQty}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                        <td className="px-5 py-3 text-ink-soft text-xs">{dateStr}</td>
+                        <td className="px-5 py-3 text-ink font-medium">{itemName}</td>
+                        <td className="px-5 py-3 text-ink-soft text-xs">
+                          {movementTypeLabels[m.type] ?? m.type}
+                        </td>
+                        <td
+                          className={`px-5 py-3 text-right font-medium ${
+                            displayQty < 0 ? "text-alert" : "text-volt"
+                          }`}
+                        >
+                          {displayQty > 0 ? `+${displayQty}` : displayQty} un.
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div className="rounded-md border border-base-line bg-base-raised p-5">

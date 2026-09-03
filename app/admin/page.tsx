@@ -307,57 +307,59 @@ export default async function OverviewPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 rounded-md border border-base-line bg-base-raised p-5">
+        <div className="lg:col-span-2 rounded-md border border-base-line bg-base-raised p-5 overflow-hidden">
           <h2 className="text-sm font-medium text-ink mb-4">Pedidos recentes</h2>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-ink-soft border-b border-base-line">
-                <th className="pb-2 font-normal">Pedido</th>
-                <th className="pb-2 font-normal">Cliente</th>
-                <th className="pb-2 font-normal">Pagamento</th>
-                <th className="pb-2 font-normal">Status</th>
-                <th className="pb-2 font-normal text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentOrders.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-6 text-center text-ink-soft">
-                    Nenhum pedido recente.
-                  </td>
+          <div className="overflow-x-auto -mx-5 px-5 sm:mx-0 sm:px-0">
+            <table className="w-full text-sm min-w-[480px]">
+              <thead>
+                <tr className="text-left text-xs text-ink-soft border-b border-base-line">
+                  <th className="pb-2 font-normal">Pedido</th>
+                  <th className="pb-2 font-normal">Cliente</th>
+                  <th className="pb-2 font-normal">Pagamento</th>
+                  <th className="pb-2 font-normal">Status</th>
+                  <th className="pb-2 font-normal text-right">Total</th>
                 </tr>
-              ) : (
-                recentOrders.map((o) => {
-                  const statusLabel = orderStatusLabels[o.status] ?? o.status;
-                  const paymentLabel = o.payments[0]
-                    ? paymentMethodLabels[o.payments[0].method] ?? o.payments[0].method
-                    : "N/A";
-                  const displayId = `PD-${o.id.slice(-4).toUpperCase()}`;
+              </thead>
+              <tbody>
+                {recentOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-ink-soft">
+                      Nenhum pedido recente.
+                    </td>
+                  </tr>
+                ) : (
+                  recentOrders.map((o) => {
+                    const statusLabel = orderStatusLabels[o.status] ?? o.status;
+                    const paymentLabel = o.payments[0]
+                      ? paymentMethodLabels[o.payments[0].method] ?? o.payments[0].method
+                      : "N/A";
+                    const displayId = `PD-${o.id.slice(-4).toUpperCase()}`;
 
-                  return (
-                    <tr
-                      key={o.id}
-                      className="border-b border-base-line/60 last:border-0"
-                    >
-                      <td className="py-3 text-ink-soft">{displayId}</td>
-                      <td className="py-3 text-ink">
-                        {o.customer?.name ?? "Cliente Avulso"}
-                      </td>
-                      <td className="py-3 text-ink-soft">{paymentLabel}</td>
-                      <td className="py-3">
-                        <StatusPill tone={orderTone[statusLabel] ?? "muted"}>
-                          {statusLabel}
-                        </StatusPill>
-                      </td>
-                      <td className="py-3 text-right text-ink">
-                        {currency(Number(o.total))}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                    return (
+                      <tr
+                        key={o.id}
+                        className="border-b border-base-line/60 last:border-0"
+                      >
+                        <td className="py-3 text-ink-soft font-mono">{displayId}</td>
+                        <td className="py-3 text-ink">
+                          {o.customer?.name ?? "Cliente Avulso"}
+                        </td>
+                        <td className="py-3 text-ink-soft">{paymentLabel}</td>
+                        <td className="py-3">
+                          <StatusPill tone={orderTone[statusLabel] ?? "muted"}>
+                            {statusLabel}
+                          </StatusPill>
+                        </td>
+                        <td className="py-3 text-right text-ink font-medium">
+                          {currency(Number(o.total))}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div className="rounded-md border border-base-line bg-base-raised p-5">

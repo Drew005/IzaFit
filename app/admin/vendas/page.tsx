@@ -64,72 +64,83 @@ export default async function VendasPage() {
       />
 
       <div className="rounded-md border border-base-line bg-base-raised overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-ink-soft border-b border-base-line">
-              <th className="px-5 py-3 font-normal">Pedido</th>
-              <th className="px-5 py-3 font-normal">Cliente</th>
-              <th className="px-5 py-3 font-normal">Pagamento</th>
-              <th className="px-5 py-3 font-normal">Status</th>
-              <th className="px-5 py-3 font-normal text-right">Total</th>
-              <th className="px-5 py-3 font-normal text-right">Detalhes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-5 py-8 text-center text-ink-soft">
-                  Nenhuma venda registrada.
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[580px]">
+            <thead>
+              <tr className="text-left text-xs text-ink-soft border-b border-base-line">
+                <th className="px-5 py-3 font-normal">Pedido</th>
+                <th className="px-5 py-3 font-normal">Cliente</th>
+                <th className="px-5 py-3 font-normal">Pagamento</th>
+                <th className="px-5 py-3 font-normal">Status</th>
+                <th className="px-5 py-3 font-normal text-right">Total</th>
+                <th className="px-5 py-3 font-normal text-right">Detalhes</th>
               </tr>
-            ) : (
-              orders.map((o) => {
-                const statusLabel = orderStatusLabels[o.status] ?? o.status;
-                const paymentLabel = o.payments[0]
-                  ? paymentMethodLabels[o.payments[0].method] ?? o.payments[0].method
-                  : "N/A";
-                const displayId = `PD-${o.id.slice(-4).toUpperCase()}`;
+            </thead>
+            <tbody>
+              {orders.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-8 text-center text-ink-soft">
+                    Nenhum pedido registrado.
+                  </td>
+                </tr>
+              ) : (
+                orders.map((o) => {
+                  const statusLabel = orderStatusLabels[o.status] ?? o.status;
+                  const paymentLabel = o.payments[0]
+                    ? paymentMethodLabels[o.payments[0].method] ?? o.payments[0].method
+                    : "N/A";
+                  const displayId = `PD-${o.id.slice(-4).toUpperCase()}`;
 
-                return (
-                  <tr
-                    key={o.id}
-                    className="border-b border-base-line/60 last:border-0 hover:bg-base/40"
-                  >
-                    <td className="px-5 py-3 text-ink-soft font-mono">
-                      <Link
-                        href={`/admin/vendas/${o.id}`}
-                        className="hover:text-volt transition-colors"
-                      >
-                        {displayId}
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3 text-ink">
-                      {o.customer?.name ?? "Cliente Avulso"}
-                    </td>
-                    <td className="px-5 py-3 text-ink-soft">{paymentLabel}</td>
-                    <td className="px-5 py-3">
-                      <StatusPill tone={orderTone[statusLabel] ?? "muted"}>
-                        {statusLabel}
-                      </StatusPill>
-                    </td>
-                    <td className="px-5 py-3 text-right text-ink font-medium">
-                      {currency(Number(o.total))}
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <Link
-                        href={`/admin/vendas/${o.id}`}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-base-line bg-base text-xs text-ink-soft hover:text-ink hover:border-volt/60 transition-colors"
-                      >
-                        <Eye size={13} />
-                        Ver
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                  return (
+                    <tr
+                      key={o.id}
+                      className="border-b border-base-line/60 last:border-0 hover:bg-base/40"
+                    >
+                      <td className="px-5 py-3 text-ink-soft font-mono">
+                        <Link
+                          href={`/admin/vendas/${o.id}`}
+                          className="hover:text-volt transition-colors"
+                        >
+                          {displayId}
+                        </Link>
+                      </td>
+                      <td className="px-5 py-3 text-ink">
+                        {o.customer ? (
+                          <Link
+                            href={`/admin/clientes/${o.customer.id}/editar`}
+                            className="hover:text-volt transition-colors"
+                          >
+                            {o.customer.name}
+                          </Link>
+                        ) : (
+                          <span className="text-ink-soft">Cliente Avulso</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-ink-soft">{paymentLabel}</td>
+                      <td className="px-5 py-3">
+                        <StatusPill tone={orderTone[statusLabel] ?? "muted"}>
+                          {statusLabel}
+                        </StatusPill>
+                      </td>
+                      <td className="px-5 py-3 text-right text-ink font-medium">
+                        {currency(Number(o.total))}
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <Link
+                          href={`/admin/vendas/${o.id}`}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-base-line bg-base text-xs text-ink-soft hover:text-ink hover:border-volt/60 transition-colors"
+                        >
+                          <Eye size={13} />
+                          Ver
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

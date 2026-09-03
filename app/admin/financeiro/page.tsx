@@ -230,67 +230,69 @@ export default async function FinanceiroPage() {
         <div className="px-5 py-4 border-b border-base-line flex items-center justify-between">
           <h2 className="text-sm font-medium text-ink">Despesas cadastradas</h2>
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-ink-soft border-b border-base-line">
-              <th className="px-5 py-3 font-normal">Categoria</th>
-              <th className="px-5 py-3 font-normal">Descrição</th>
-              <th className="px-5 py-3 font-normal">Vencimento</th>
-              <th className="px-5 py-3 font-normal">Status</th>
-              <th className="px-5 py-3 font-normal text-right">Valor</th>
-              <th className="px-5 py-3 font-normal text-right">Ação</th>
-            </tr>
-          </thead>
-          <tbody>
-            {expenses.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-5 py-8 text-center text-ink-soft">
-                  Nenhuma despesa cadastrada.
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[580px]">
+            <thead>
+              <tr className="text-left text-xs text-ink-soft border-b border-base-line">
+                <th className="px-5 py-3 font-normal">Categoria</th>
+                <th className="px-5 py-3 font-normal">Descrição</th>
+                <th className="px-5 py-3 font-normal">Vencimento</th>
+                <th className="px-5 py-3 font-normal">Status</th>
+                <th className="px-5 py-3 font-normal text-right">Valor</th>
+                <th className="px-5 py-3 font-normal text-right">Ação</th>
               </tr>
-            ) : (
-              expenses.map((e) => {
-                const status = e.paidAt ? "Pago" : "Pendente";
-                const cat = expenseCategoryLabels[e.category] ?? e.category;
-                const dueDateStr = new Intl.DateTimeFormat("pt-BR").format(
-                  new Date(e.dueDate)
-                );
+            </thead>
+            <tbody>
+              {expenses.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-8 text-center text-ink-soft">
+                    Nenhuma despesa cadastrada.
+                  </td>
+                </tr>
+              ) : (
+                expenses.map((e) => {
+                  const status = e.paidAt ? "Pago" : "Pendente";
+                  const cat = expenseCategoryLabels[e.category] ?? e.category;
+                  const dueDateStr = new Intl.DateTimeFormat("pt-BR").format(
+                    new Date(e.dueDate)
+                  );
 
-                return (
-                  <tr key={e.id} className="border-b border-base-line/60 last:border-0 hover:bg-base/40">
-                    <td className="px-5 py-3 text-ink-soft">{cat}</td>
-                    <td className="px-5 py-3 text-ink">
-                      <Link
-                        href={`/admin/financeiro/despesas/${e.id}/editar`}
-                        className="hover:text-volt transition-colors"
-                      >
-                        {e.description}
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3 text-ink-soft">{dueDateStr}</td>
-                    <td className="px-5 py-3">
-                      <StatusPill tone={expenseTone[status] ?? "muted"}>
-                        {status}
-                      </StatusPill>
-                    </td>
-                    <td className="px-5 py-3 text-right text-ink font-medium">
-                      {currency(Number(e.amount))}
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <Link
-                        href={`/admin/financeiro/despesas/${e.id}/editar`}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-base-line bg-base text-xs text-ink-soft hover:text-ink hover:border-volt/60 transition-colors"
-                      >
-                        <Edit2 size={13} />
-                        Editar
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                  return (
+                    <tr key={e.id} className="border-b border-base-line/60 last:border-0 hover:bg-base/40">
+                      <td className="px-5 py-3 text-ink-soft">{cat}</td>
+                      <td className="px-5 py-3 text-ink">
+                        <Link
+                          href={`/admin/financeiro/despesas/${e.id}/editar`}
+                          className="hover:text-volt transition-colors font-medium"
+                        >
+                          {e.description}
+                        </Link>
+                      </td>
+                      <td className="px-5 py-3 text-ink-soft">{dueDateStr}</td>
+                      <td className="px-5 py-3">
+                        <StatusPill tone={expenseTone[status]}>
+                          {status}
+                        </StatusPill>
+                      </td>
+                      <td className="px-5 py-3 text-right text-ink font-medium">
+                        {currency(Number(e.amount))}
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <Link
+                          href={`/admin/financeiro/despesas/${e.id}/editar`}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-base-line bg-base text-xs text-ink-soft hover:text-ink hover:border-volt/60 transition-colors"
+                        >
+                          <Edit2 size={13} />
+                          Editar
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

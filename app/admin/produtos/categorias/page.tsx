@@ -43,71 +43,73 @@ export default async function CategoriasPage() {
       />
 
       <div className="rounded-md border border-base-line bg-base-raised overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-ink-soft border-b border-base-line">
-              <th className="px-5 py-3 font-normal">Categoria</th>
-              <th className="px-5 py-3 font-normal">Slug / URL</th>
-              <th className="px-5 py-3 font-normal">Categoria Superior</th>
-              <th className="px-5 py-3 font-normal text-center">Produtos</th>
-              <th className="px-5 py-3 font-normal text-center">Subcategorias</th>
-              <th className="px-5 py-3 font-normal text-right">Ação</th>
-            </tr>
-          </thead>
-          <tbody>
-            {categories.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-5 py-8 text-center text-ink-soft">
-                  Nenhuma categoria cadastrada.
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[560px]">
+            <thead>
+              <tr className="text-left text-xs text-ink-soft border-b border-base-line">
+                <th className="px-5 py-3 font-normal">Categoria</th>
+                <th className="px-5 py-3 font-normal">Slug / URL</th>
+                <th className="px-5 py-3 font-normal">Categoria Superior</th>
+                <th className="px-5 py-3 font-normal text-center">Produtos</th>
+                <th className="px-5 py-3 font-normal text-center">Subcategorias</th>
+                <th className="px-5 py-3 font-normal text-right">Ação</th>
               </tr>
-            ) : (
-              categories.map((c) => (
-                <tr
-                  key={c.id}
-                  className="border-b border-base-line/60 last:border-0 hover:bg-base/40"
-                >
-                  <td className="px-5 py-3 text-ink font-medium">
-                    <div className="flex items-center gap-2">
-                      <FolderTree size={15} className="text-volt" />
-                      <Link
-                        href={`/admin/produtos/categorias/${c.id}/editar`}
-                        className="hover:text-volt transition-colors"
-                      >
-                        {c.name}
-                      </Link>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3 text-ink-soft font-mono text-xs">
-                    {c.slug}
-                  </td>
-                  <td className="px-5 py-3 text-ink-soft">
-                    {c.parent ? c.parent.name : "— Principal"}
-                  </td>
-                  <td className="px-5 py-3 text-center text-ink">
-                    <span className="inline-block px-2 py-0.5 rounded-sm bg-base border border-base-line text-xs font-mono">
-                      {c._count.products}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-center text-ink-soft">
-                    <span className="inline-block px-2 py-0.5 rounded-sm bg-base border border-base-line text-xs font-mono">
-                      {c._count.children}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <Link
-                      href={`/admin/produtos/categorias/${c.id}/editar`}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-base-line bg-base text-xs text-ink-soft hover:text-ink hover:border-volt/60 transition-colors"
-                    >
-                      <Edit2 size={13} />
-                      Editar
-                    </Link>
+            </thead>
+            <tbody>
+              {categories.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-8 text-center text-ink-soft">
+                    Nenhum categoria cadastrada.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                categories.map((c) => (
+                  <tr
+                    key={c.id}
+                    className="border-b border-base-line/60 last:border-0 hover:bg-base/40"
+                  >
+                    <td className="px-5 py-3 text-ink font-medium">
+                      <div className="flex items-center gap-2">
+                        <FolderTree size={15} className="text-volt shrink-0" />
+                        <Link
+                          href={`/admin/produtos/categorias/${c.id}/editar`}
+                          className="hover:text-volt transition-colors"
+                        >
+                          {c.name}
+                        </Link>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-ink-soft font-mono text-xs">
+                      {c.slug}
+                    </td>
+                    <td className="px-5 py-3 text-ink-soft">
+                      {c.parent ? c.parent.name : "— Principal"}
+                    </td>
+                    <td className="px-5 py-3 text-center text-ink">
+                      <span className="inline-block px-2 py-0.5 rounded-sm bg-base border border-base-line text-xs font-mono">
+                        {c._count.products}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-center text-ink-soft">
+                      <span className="inline-block px-2 py-0.5 rounded-sm bg-base border border-base-line text-xs font-mono">
+                        {c._count.children}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <Link
+                        href={`/admin/produtos/categorias/${c.id}/editar`}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-base-line bg-base text-xs text-ink-soft hover:text-ink hover:border-volt/60 transition-colors"
+                      >
+                        <Edit2 size={13} />
+                        Editar
+                      </Link>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

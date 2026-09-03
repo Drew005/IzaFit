@@ -14,20 +14,20 @@ export default function MetricCard({
 }) {
   const positive = delta >= 0;
   return (
-    <div className="rounded-md border border-base-line bg-base-raised p-5">
-      <p className="text-xs text-ink-soft">{label}</p>
-      <div className="mt-3 flex items-end justify-between">
-        <p className="font-display text-2xl text-ink">
+    <div className="rounded-md border border-base-line bg-base-raised p-4 sm:p-5 flex flex-col justify-between">
+      <p className="text-xs text-ink-soft truncate">{label}</p>
+      <div className="mt-2 sm:mt-3 flex items-end justify-between gap-2">
+        <p className="font-display text-xl sm:text-2xl text-ink truncate font-medium">
           {value}
-          {suffix && <span className="text-sm text-ink-soft ml-1">{suffix}</span>}
+          {suffix && <span className="text-xs sm:text-sm text-ink-soft ml-1 font-normal">{suffix}</span>}
         </p>
         <span
           className={clsx(
-            "flex items-center gap-0.5 text-xs font-medium",
+            "flex shrink-0 items-center gap-0.5 text-[11px] sm:text-xs font-medium",
             positive ? "text-volt" : "text-alert"
           )}
         >
-          {positive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+          {positive ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
           {Math.abs(delta)}%
         </span>
       </div>
