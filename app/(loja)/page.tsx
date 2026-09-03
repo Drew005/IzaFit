@@ -2,13 +2,14 @@ import Link from "next/link";
 import { Sparkles, ArrowRight, Truck, ShieldCheck, RotateCcw } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getActiveDiscounts, computeVariantDiscount } from "@/lib/discounts";
+import { getStoreBranding } from "@/lib/store-branding";
 import ProductCard from "@/components/store/ProductCard";
 import HeroCarousel from "@/components/store/HeroCarousel";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [featured, categories] = await Promise.all([
+  const [featured, categories, branding] = await Promise.all([
     prisma.product.findMany({
       where: { active: true },
       include: {
@@ -23,6 +24,7 @@ export default async function HomePage() {
     prisma.category.findMany({
       orderBy: { name: "asc" },
     }),
+    getStoreBranding(),
   ]);
 
   // Descontos automáticos para os cards em destaque.
@@ -66,20 +68,7 @@ export default async function HomePage() {
   return (
     <div>
       {/* ============ HERO CAROUSEL ============ */}
-      <HeroCarousel
-        slides={[
-          {
-            image: "https://cdn.avvi.com.br//app-avvi/assets/images/dinamica/album/1/1-banner-desktop-190826-a9fb26.png",
-            alt: "IzaFit — Vista seu treino",
-            href: "/produtos",
-          },
-          {
-            image: "https://cdn.avvi.com.br//app-avvi/assets/images/dinamica/album/1/1-banner-desktop-190826-a9fb26.png",
-            alt: "IzaFit — Nova coleção",
-            href: "/produtos?sort=new",
-          },
-        ]}
-      />
+      <HeroCarousel slides={branding.heroSlides} />
 
       {/* ============ CATEGORIAS ============ */}
       {categories.length > 0 && (

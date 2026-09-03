@@ -1,6 +1,6 @@
 import PageHeader from "@/components/PageHeader";
 import { prisma } from "@/lib/prisma";
-import { Settings, Image, LayoutDashboard, Upload, RefreshCw } from "lucide-react";
+import { Image, LayoutDashboard, Upload } from "lucide-react";
 import { updateStoreBranding } from "@/lib/actions";
 
 export const dynamic = "force-dynamic";
@@ -131,20 +131,6 @@ export default async function ConfiguracoesPage() {
           </div>
         </section>
 
-        {/* --- Ações Rápidas --- */}
-        <section className="rounded-md border border-base-line bg-base-raised p-6 space-y-4">
-          <h3 className="font-medium text-ink">Outras Ações</h3>
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="flex items-center gap-2 rounded-sm border border-base-line bg-base px-4 py-2 text-sm text-ink-soft hover:border-volt/60 hover:text-ink transition-colors"
-            >
-              <RefreshCw size={16} />
-              Recarregar Página
-            </button>
-          </div>
-        </section>
       </form>
     </div>
   );

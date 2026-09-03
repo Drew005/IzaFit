@@ -15,6 +15,7 @@ const MIME_EXT: Record<string, string> = {
   "image/webp": ".webp",
   "image/gif": ".gif",
   "image/avif": ".avif",
+  "image/svg+xml": ".svg",
 };
 
 // Garante que o bucket "products" exista (cria se necessário), tornando-o público.

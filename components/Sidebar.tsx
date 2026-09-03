@@ -14,6 +14,7 @@ import {
   LogOut,
   UserCog,
   BadgePercent,
+  Settings,
 } from "lucide-react";
 import clsx from "clsx";
 import { logout } from "@/lib/auth";
@@ -28,7 +29,7 @@ const RESTRICTED_FOR_SELLER = new Set([
 ]);
 
 // Gestão de contas é exclusiva do Administrador.
-const ADMIN_ONLY = new Set(["/admin/usuarios"]);
+const ADMIN_ONLY = new Set(["/admin/usuarios", "/admin/configuracoes"]);
 
 const ALL_NAV = [
   { href: "/admin", label: "Visão geral", icon: LayoutGrid },
@@ -41,6 +42,7 @@ const ALL_NAV = [
   { href: "/admin/financeiro", label: "Financeiro", icon: Wallet },
   { href: "/admin/compras", label: "Compras & fornecedores", icon: Truck },
   { href: "/admin/usuarios", label: "Usuários & acessos", icon: UserCog },
+  { href: "/admin/configuracoes", label: "Configurações", icon: Settings },
 ];
 
 export default function Sidebar({

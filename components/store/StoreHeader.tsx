@@ -23,8 +23,10 @@ export type StoreHeaderCustomer = {
 
 export default function StoreHeader({
   customer,
+  logoUrl = "/izafitlogo.svg",
 }: {
   customer: StoreHeaderCustomer;
+  logoUrl?: string;
 }) {
   const { count: cartCount } = useCart();
   const { count: favCount } = useFavorites();
@@ -36,7 +38,7 @@ export default function StoreHeader({
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-6">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
-          <img src="/izafitlogo.svg" alt="IzaFit Logo" className="h-8" />
+          <img src={logoUrl} alt="IzaFit Logo" className="h-8" />
         </Link>
 
         {/* Navegação principal */}
