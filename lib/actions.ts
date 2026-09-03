@@ -1149,6 +1149,76 @@ export async function deleteGift(id: string) {
 }
 
 // =============================================================================
+// DESCONTOS
+// =============================================================================
+
+export async function createDiscount(formData: FormData) {
+  const name = formData.get("name") as string;
+  const type = formData.get("type") as CouponType;
+  const value = parseFloat(formData.get("value") as string);
+  const productId = (formData.get("productId") as string) || null;
+  const categoryId = (formData.get("categoryId") as string) || null;
+  const variantId = (formData.get("variantId") as string) || null;
+  const validUntilStr = formData.get("validUntil") as string;
+  const validUntil = validUntilStr ? new Date(validUntilStr) : null;
+
+  if (!name || isNaN(value)) throw new Error("Nome e Valor são obrigatórios.");
+
+  await prisma.discount.create({
+    data: {
+      name,
+      type,
+      value,
+      productId,
+      categoryId,
+      variantId,
+      validUntil,
+      active: true,
+    },
+  });
+
+  revalidatePath("/admin/descontos");
+  redirect("/admin/descontos");
+}
+
+export async function updateDiscount(id: string, formData: FormData) {
+  const name = formData.get("name") as string;
+  const type = formData.get("type") as CouponType;
+  const value = parseFloat(formData.get("value") as string);
+  const productId = (formData.get("productId") as string) || null;
+  const categoryId = (formData.get("categoryId") as string) || null;
+  const variantId = (formData.get("variantId") as string) || null;
+  const validUntilStr = formData.get("validUntil") as string;
+  const validUntil = validUntilStr ? new Date(validUntilStr) : null;
+  const active = formData.get("active") === "true";
+
+  if (!name || isNaN(value)) throw new Error("Nome e Valor são obrigatórios.");
+
+  await prisma.discount.update({
+    where: { id },
+    data: {
+      name,
+      type,
+      value,
+      productId,
+      categoryId,
+      variantId,
+      validUntil,
+      active,
+    },
+  });
+
+  revalidatePath("/admin/descontos");
+  redirect("/admin/descontos");
+}
+
+export async function deleteDiscount(id: string) {
+  await prisma.discount.delete({ where: { id } });
+  revalidatePath("/admin/descontos");
+  redirect("/admin/descontos");
+}
+
+// =============================================================================
 // COMPRAS & FORNECEDORES
 // =============================================================================
 
