@@ -3,7 +3,17 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useFormState, useFormStatus } from "react-dom";
-import { ShoppingBag, MapPin, CheckCircle2, Shirt } from "lucide-react";
+import {
+  ShoppingBag,
+  MapPin,
+  CheckCircle2,
+  Shirt,
+  QrCode,
+  CreditCard,
+  FileText,
+  Copy,
+  Check,
+} from "lucide-react";
 import { useCart } from "@/components/store/CartProvider";
 import { checkout } from "@/lib/checkout";
 import { currency } from "@/lib/format";
@@ -27,6 +37,12 @@ const PAYMENT_LABELS: Record<string, string> = {
   BOLETO: "Boleto",
 };
 
+const PAYMENT_ICONS: Record<string, React.ReactNode> = {
+  PIX: <QrCode size={15} className="text-volt" />,
+  CREDIT_CARD: <CreditCard size={15} className="text-volt" />,
+  BOLETO: <FileText size={15} className="text-volt" />,
+};
+
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
@@ -35,7 +51,33 @@ function SubmitButton() {
       disabled={pending}
       className="mt-5 w-full rounded-sm bg-volt px-4 py-3 text-sm font-medium text-base transition-colors hover:bg-volt-dim disabled:opacity-50"
     >
-      {pending ? "Confirmando pedido..." : "Confirmar pedido"}
+      {pending ? "Confirmando pedido..." : "Confirmar pedido e gerar pagamento"}
+    </button>
+  );
+}
+
+// Botão copiar PIX copia-e-cola com feedback visual
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard indisponível (ex.: contexto não seguro) — ignora
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1.5 rounded-sm border border-volt/40 bg-volt/10 px-3 py-1.5 text-xs font-medium text-volt transition-colors hover:bg-volt/20"
+    >
+      {copied ? <Check size={13} /> : <Copy size={13} />}
+      {copied ? "Copiado!" : "Copiar"}
     </button>
   );
 }
@@ -71,13 +113,71 @@ export default function CheckoutForm({
           <>
             <CheckCircle2 size={40} className="mx-auto text-volt" />
             <h2 className="mt-4 font-display text-xl font-bold text-ink">
-              Pedido confirmado!
+              Pedido #{state.orderId?.slice(-6)} criado!
             </h2>
             <p className="mt-2 text-sm text-ink-soft">
-              Seu pedido #{state.orderId?.slice(-6)} foi criado com sucesso.
-              Acompanhe o status em "Meus pedidos".
+              {state.payment?.simulated
+                ? "Pagamento em modo de demonstração — finalize para concluir a compra."
+                : "Seu pagamento foi gerado. Conclua o pagamento abaixo para confirmar o pedido."}
             </p>
-            <div className="mt-6 flex justify-center gap-3">
+
+            {state.payment?.method === "PIX" && (
+              <div className="mx-auto mt-6 max-w-sm">
+                {state.payment.pixQrCodeBase64 && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={state.payment.pixQrCodeBase64}
+                    alt="QR Code PIX"
+                    className="mx-auto h-48 w-48 rounded-sm border border-base-line bg-white object-contain"
+                  />
+                )}
+                <p className="mt-4 text-sm font-medium text-ink">
+                  Pague com PIX (copia e cola)
+                </p>
+                {state.payment.pixCode && (
+                  <div className="mt-2 flex items-center gap-2 rounded-sm border border-base-line bg-base px-3 py-2 text-left">
+                    <code className="flex-1 truncate text-xs text-ink-soft">
+                      {state.payment.pixCode}
+                    </code>
+                    <CopyButton text={state.payment.pixCode} />
+                  </div>
+                )}
+                <p className="mt-3 text-xs text-ink-soft">
+                  O pedido é aprovado automaticamente após a confirmação do
+                  pagamento peta instituição.
+                </p>
+              </div>
+            )}
+
+            {state.payment?.method === "CREDIT_CARD" && (
+              <div className="mx-auto mt-6 max-w-sm">
+                <CreditCard size={40} className="mx-auto text-volt" />
+                <p className="mt-3 text-sm font-medium text-ink">
+                  Pagamento com cartão registrado
+                </p>
+                <p className="mt-1 text-xs text-ink-soft">
+                  Em modo simulação o pagamento é considerado aprovado. Em
+                  produção, a confirmação chega pelo Mercado Pago.
+                </p>
+              </div>
+            )}
+
+            {state.payment?.method === "BOLETO" && state.payment.boletoUrl && (
+              <div className="mx-auto mt-6 max-w-sm">
+                <FileText size={40} className="mx-auto text-volt" />
+                <p className="mt-3 text-sm font-medium text-ink">Boleto gerado</p>
+                <a
+                  href={state.payment.boletoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-block rounded-sm bg-volt px-5 py-2.5 text-sm font-medium text-base transition-colors hover:bg-volt-dim"
+                >
+                  Ver boleto
+                </a>
+              </div>
+            )}
+
+            <div className="mt-8 flex justify-center gap-3">
               <Link
                 href="/perfil"
                 className="rounded-sm bg-volt px-5 py-2.5 text-sm font-medium text-base transition-colors hover:bg-volt-dim"
@@ -238,20 +338,29 @@ export default function CheckoutForm({
             <h2 className="text-sm font-medium text-ink">Pagamento</h2>
           </div>
           <div className="space-y-4 px-5 py-4">
-            <label className="block">
+            <div>
               <span className="text-xs text-ink-soft">Forma de pagamento</span>
-              <select
-                name="paymentMethod"
-                defaultValue="PIX"
-                className="mt-1 w-full rounded-sm border border-base-line bg-base px-3 py-2 text-sm text-ink focus:border-volt focus:outline-none"
-              >
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
                 {Object.entries(PAYMENT_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
+                  <label
+                    key={value}
+                    className="flex cursor-pointer items-center gap-2 rounded-sm border border-base-line bg-base px-3 py-3 transition-colors has-[:checked]:border-volt/60 has-[:checked]:bg-volt/5"
+                  >
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value={value}
+                      defaultChecked={value === "PIX"}
+                      className="rounded-full border-base-line text-volt focus:ring-volt"
+                    />
+                    <span className="flex items-center gap-1.5 text-sm text-ink">
+                      {PAYMENT_ICONS[value]}
+                      {label}
+                    </span>
+                  </label>
                 ))}
-              </select>
-            </label>
+              </div>
+            </div>
 
             <label className="block">
               <span className="text-xs text-ink-soft">Cupom de desconto</span>

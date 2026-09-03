@@ -4,9 +4,19 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentCustomer } from "@/lib/customer-auth";
 import { findEligibleGifts } from "@/lib/gift-eligibility";
+import { createMercadoPagoPayment, type CheckoutPaymentResult } from "@/lib/mercadopago";
 import { CouponType, PaymentMethod } from "@prisma/client";
 
-type CheckoutState = { error?: string; success?: string; orderId?: string } | null;
+/**
+ * Estado retornado pelo checkout. Pode conter dados de pagamento
+ * para exibir ao cliente (PIX copia-e-cola, QR Code, link boleto).
+ */
+type CheckoutState = {
+  error?: string;
+  success?: string;
+  orderId?: string;
+  payment?: CheckoutPaymentResult;
+} | null;
 
 export async function checkout(
   _prevState: CheckoutState | undefined,
@@ -144,6 +154,30 @@ export async function checkout(
     return created;
   });
 
+  // ── Criar pagamento no Mercado Pago (ou simulação) ──
+  // O checkout transparente só aceita PIX, cartão de crédito ou boleto.
+  // Qualquer outro método cai em PIX como fallback seguro.
+  const mpMethod =
+    paymentMethod === PaymentMethod.CREDIT_CARD
+      ? "CREDIT_CARD"
+      : paymentMethod === PaymentMethod.BOLETO
+        ? "BOLETO"
+        : "PIX";
+
+  const payResult = await createMercadoPagoPayment({
+    amount: Math.round(Number(order.total) * 100),
+    description: `IzaFit — Pedido #${order.id.slice(-6).toUpperCase()}`,
+    method: mpMethod,
+    payerEmail: customer.email || "",
+    payerCpf: customer.cpf || undefined,
+    orderId: order.id,
+    installments: 1,
+  });
+
   revalidatePath("/perfil");
-  return { success: "Pedido realizado com sucesso!", orderId: order.id };
+  return {
+    success: "Pedido realizado com sucesso!",
+    orderId: order.id,
+    payment: payResult,
+  };
 }
