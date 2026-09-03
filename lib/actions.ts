@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { uploadImage, deleteUploadedImages } from "@/lib/upload";
+import { uploadImage, uploadBrandingImage, deleteUploadedImages } from "@/lib/upload";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -17,6 +17,7 @@ import {
   PaymentStatus,
   PurchaseStatus,
   StockMovementType,
+  Prisma,
 } from "@prisma/client";
 
 const ProductSchema = z.object({
@@ -1298,8 +1299,46 @@ export async function deleteDiscount(id: string) {
 }
 
 // =============================================================================
-// COMPRAS & FORNECEDORES
+// CONFIGURAÇÕES DA LOJA (Branding)
 // =============================================================================
+
+export async function updateStoreBranding(formData: FormData) {
+  await requireAdmin();
+
+  const logoFile = formData.get("logoFile") as File | null;
+  const heroSlidesJson = formData.get("heroSlides") as string;
+
+  let logoUrl: string | undefined;
+  if (logoFile && logoFile.size > 0) {
+    logoUrl = await uploadBrandingImage(logoFile);
+  }
+
+  let heroSlides: Prisma.JsonValue | undefined;
+  if (heroSlidesJson) {
+    try {
+      heroSlides = JSON.parse(heroSlidesJson);
+    } catch (e) {
+      throw new Error("Formato JSON dos slides inválido.");
+    }
+  }
+
+  // Assumindo que só existe uma loja no sistema.
+  const store = await prisma.store.findFirst();
+  if (!store) throw new Error("Loja não encontrada.");
+
+  await prisma.store.update({
+    where: { id: store.id },
+    data: {
+      ...(logoUrl && { logoUrl }),
+      ...(heroSlides !== undefined && { heroSlides }),
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/entrar");
+  revalidatePath("/cadastrar");
+  revalidatePath("/admin/configuracoes");
+}
 
 export async function createPurchase(formData: FormData) {
   const supplierId = formData.get("supplierId") as string;
