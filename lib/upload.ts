@@ -97,7 +97,7 @@ export async function deleteUploadedImages(
   // Remove em lotes de até 100 (limite do Supabase Storage).
   for (let i = 0; i < paths.length; i += 100) {
     const chunk = paths.slice(i, i + 100);
-    const { error } = await supabase.storage.from(BUCKET).remove(chunk);
+    const { error } = await supabase.storage.from(PRODUCT_BUCKET).remove(chunk);
     if (error) throw error;
   }
 }

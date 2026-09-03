@@ -1310,13 +1310,17 @@ export async function updateStoreBranding(formData: FormData) {
 
   let logoUrl: string | undefined;
   if (logoFile && logoFile.size > 0) {
-    logoUrl = await uploadBrandingImage(logoFile);
+    const uploadedUrl = await uploadBrandingImage(logoFile);
+    if (uploadedUrl) logoUrl = uploadedUrl;
   }
 
-  let heroSlides: Prisma.JsonValue | undefined;
+  let heroSlides: Prisma.InputJsonValue | undefined;
   if (heroSlidesJson) {
     try {
-      heroSlides = JSON.parse(heroSlidesJson);
+      const parsed = JSON.parse(heroSlidesJson);
+      if (Array.isArray(parsed)) {
+        heroSlides = parsed as Prisma.InputJsonValue;
+      }
     } catch (e) {
       throw new Error("Formato JSON dos slides inválido.");
     }
