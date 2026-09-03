@@ -142,8 +142,9 @@ model Category {
   parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children Category[] @relation("CategoryTree")
 
-  products Product[]
+  products  Product[]
   gifts    Gift[]
+  discounts Discount[] @relation("CategoryDiscount")
 
   @@index([parentId])
 }
@@ -180,8 +181,10 @@ model Product {
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
 
-  variants ProductVariant[]
-  gifts    Gift[]
+  variants  ProductVariant[]
+  gifts     Gift[]
+  discounts Discount[] @relation("ProductDiscount")
+  discountProducts DiscountProduct[]
 
   @@index([categoryId])
 }
@@ -227,6 +230,7 @@ model ProductVariant {
   stockMovements  StockMovement[]
   orderItems      OrderItem[]
   purchaseItems   PurchaseItem[]
+  discounts       Discount[] @relation("VariantDiscount")
 
   @@index([productId])
   @@index([storeId])
@@ -359,11 +363,12 @@ model Discount {
   
   // O desconto pode ser aplicado a um destes níveis
   productId   String?
-  product     Product?   @relation(fields: [productId], references: [id])
+  product     Product?   @relation("ProductDiscount", fields: [productId], references: [id])
   categoryId  String?
-  category    Category?  @relation(fields: [categoryId], references: [id])
+  category    Category?  @relation("CategoryDiscount", fields: [categoryId], references: [id])
   variantId   String?
-  variant     ProductVariant? @relation(fields: [variantId], references: [id])
+  variant     ProductVariant? @relation("VariantDiscount", fields: [variantId], references: [id])
+  products    DiscountProduct[]
 
   active      Boolean    @default(true)
   validFrom   DateTime   @default(now())
@@ -373,6 +378,16 @@ model Discount {
   @@index([productId])
   @@index([categoryId])
   @@index([variantId])
+}
+
+model DiscountProduct {
+  discountId String
+  productId  String
+  discount   Discount @relation(fields: [discountId], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([discountId, productId])
+  @@index([productId])
 }
 
 model OrderGift {
