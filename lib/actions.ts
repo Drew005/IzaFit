@@ -1306,34 +1306,76 @@ export async function updateStoreBranding(formData: FormData) {
   await requireAdmin();
 
   const logoFile = formData.get("logoFile") as File | null;
-  const heroSlidesJson = formData.get("heroSlides") as string;
+  const removeLogo = formData.get("removeLogo") === "true";
+  const heroSlidesJson = formData.get("heroSlides") as string | null;
 
-  let logoUrl: string | undefined;
-  if (logoFile && logoFile.size > 0) {
+  let logoUrl: string | null | undefined = undefined;
+  if (removeLogo) {
+    logoUrl = null;
+  } else if (logoFile && logoFile.size > 0) {
     const uploadedUrl = await uploadBrandingImage(logoFile);
     if (uploadedUrl) logoUrl = uploadedUrl;
   }
 
   let heroSlides: Prisma.InputJsonValue | undefined;
-  if (heroSlidesJson) {
+
+  // 1. Processar slides enviados via formulário interativo (com suporte a upload de arquivos)
+  const slideIndexes = formData.getAll("slideIndex") as string[];
+  if (slideIndexes.length > 0) {
+    const slidesList: Array<{ image: string; alt: string; href?: string }> = [];
+
+    for (const idx of slideIndexes) {
+      const slideFile = formData.get(`slideFile_${idx}`) as File | null;
+      const existingUrl = (formData.get(`slideUrl_${idx}`) as string)?.trim();
+      const alt = (formData.get(`slideAlt_${idx}`) as string)?.trim() || "Banner Principal";
+      const href = (formData.get(`slideHref_${idx}`) as string)?.trim() || undefined;
+
+      let imageUrl = existingUrl;
+
+      // Se o usuário selecionou um arquivo do computador, envia para o Supabase Storage
+      if (slideFile && slideFile.size > 0) {
+        const uploaded = await uploadBrandingImage(slideFile);
+        if (uploaded) {
+          imageUrl = uploaded;
+        }
+      }
+
+      if (imageUrl) {
+        slidesList.push({
+          image: imageUrl,
+          alt,
+          ...(href ? { href } : {}),
+        });
+      }
+    }
+
+    if (slidesList.length > 0) {
+      heroSlides = slidesList as Prisma.InputJsonValue;
+    }
+  } else if (heroSlidesJson) {
+    // 2. Fallback caso venha como string JSON pura
     try {
       const parsed = JSON.parse(heroSlidesJson);
       if (Array.isArray(parsed)) {
         heroSlides = parsed as Prisma.InputJsonValue;
       }
-    } catch (e) {
+    } catch {
       throw new Error("Formato JSON dos slides inválido.");
     }
   }
 
-  // Assumindo que só existe uma loja no sistema.
-  const store = await prisma.store.findFirst();
-  if (!store) throw new Error("Loja não encontrada.");
+  // Busca ou cria o registro da loja
+  let store = await prisma.store.findFirst();
+  if (!store) {
+    store = await prisma.store.create({
+      data: { name: "IzaFit" },
+    });
+  }
 
   await prisma.store.update({
     where: { id: store.id },
     data: {
-      ...(logoUrl && { logoUrl }),
+      ...(logoUrl !== undefined && { logoUrl }),
       ...(heroSlides !== undefined && { heroSlides }),
     },
   });
