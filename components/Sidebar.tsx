@@ -13,6 +13,7 @@ import {
   Truck,
   LogOut,
   UserCog,
+  BadgePercent,
 } from "lucide-react";
 import clsx from "clsx";
 import { logout } from "@/lib/auth";
@@ -32,6 +33,7 @@ const ADMIN_ONLY = new Set(["/admin/usuarios"]);
 const ALL_NAV = [
   { href: "/admin", label: "Visão geral", icon: LayoutGrid },
   { href: "/admin/vendas", label: "Vendas", icon: ShoppingBag },
+  { href: "/admin/descontos", label: "Descontos", icon: BadgePercent },
   { href: "/admin/produtos", label: "Produtos", icon: Shirt },
   { href: "/admin/estoque", label: "Estoque", icon: Boxes },
   { href: "/admin/clientes", label: "Clientes", icon: Users },
