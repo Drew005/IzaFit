@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, BadgePercent, Trash2, AlertTriangle } from "lucide-react";
 import { updateDiscount, deleteDiscount } from "@/lib/actions";
-import type { DiscountTarget } from "../novo/DiscountForm";
+import type { DiscountTarget } from "../../novo/DiscountForm";
 
 interface Product {
   id: string;
