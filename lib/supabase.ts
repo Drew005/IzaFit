@@ -15,14 +15,17 @@ export function getSupabaseAdmin() {
   const supabaseUrl = process.env.SUPABASE_URL ?? url;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? serviceKey;
 
-  const missing = [
-    !supabaseUrl ? "SUPABASE_URL" : null,
-    !supabaseKey ? "SUPABASE_SERVICE_ROLE_KEY" : null,
-  ].filter(Boolean);
-
-  if (missing.length > 0) {
-    throw new Error(`Variáveis de ambiente ausentes: ${missing.join(", ")} — configure-as no Vercel (Produção).`);
+  if (!supabaseUrl || !supabaseKey) {
+    const missing = [
+      !supabaseUrl ? "SUPABASE_URL" : null,
+      !supabaseKey ? "SUPABASE_SERVICE_ROLE_KEY" : null,
+    ].filter(Boolean);
+    throw new Error(
+      `Variáveis de ambiente ausentes: ${missing.join(", ")} — configure-as no Vercel (Produção).`
+    );
   }
+
+  // Após o guard acima, supabaseUrl e supabaseKey são strings definidas.
   return createClient(supabaseUrl, supabaseKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
