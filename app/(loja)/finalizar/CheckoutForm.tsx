@@ -177,9 +177,11 @@ export default function CheckoutForm({
             </p>
 
             {/* Detalhes do Pagamento */}
-            <div className="mt-6">
+            <div className="mt-8 rounded-lg border border-base-line bg-base p-6">
+              <h3 className="text-sm font-medium text-ink">Detalhes do pagamento</h3>
+              
               {state.payment?.method === "PIX" && (
-                <div className="mx-auto max-w-sm text-center">
+                <div className="mt-4 text-center">
                   {state.payment.pixQrCodeBase64 && (
                     <img
                       src={state.payment.pixQrCodeBase64}
@@ -187,7 +189,7 @@ export default function CheckoutForm({
                       className="mx-auto h-48 w-48 rounded-sm border border-base-line bg-white object-contain"
                     />
                   )}
-                  <p className="mt-4 text-sm font-medium text-ink">PIX (Copia e Cola)</p>
+                  <p className="mt-4 text-xs text-ink-soft">Escaneie o QR Code ou use o código abaixo:</p>
                   {state.payment.pixCode && (
                     <div className="mt-2 flex items-center gap-2 rounded-sm border border-base-line bg-base px-3 py-2 text-left">
                       <code className="flex-1 truncate text-xs text-ink-soft">
@@ -200,7 +202,7 @@ export default function CheckoutForm({
               )}
 
               {state.payment?.method === "BOLETO" && state.payment.boletoUrl && (
-                <div className="text-center">
+                <div className="mt-4 text-center">
                   <a
                     href={state.payment.boletoUrl}
                     target="_blank"
@@ -208,39 +210,15 @@ export default function CheckoutForm({
                     className="inline-flex items-center gap-2 rounded-sm bg-volt px-5 py-2.5 text-sm font-medium text-base transition-colors hover:bg-volt-dim"
                   >
                     <FileText size={16} />
-                    Ver boleto simulado
+                    Ver boleto
                   </a>
                 </div>
               )}
+              
+              {state.payment?.method === "CREDIT_CARD" && (
+                <p className="mt-4 text-sm text-ink-soft">Pagamento via cartão de crédito processado.</p>
+              )}
             </div>
-
-            {state.payment?.method === "CREDIT_CARD" && (
-              <div className="mx-auto mt-6 max-w-sm">
-                <CreditCard size={40} className="mx-auto text-volt" />
-                <p className="mt-3 text-sm font-medium text-ink">
-                  Pagamento com cartão registrado
-                </p>
-                <p className="mt-1 text-xs text-ink-soft">
-                  Em modo simulação o pagamento é considerado aprovado. Em
-                  produção, a confirmação chega pelo Mercado Pago.
-                </p>
-              </div>
-            )}
-
-            {state.payment?.method === "BOLETO" && state.payment.boletoUrl && (
-              <div className="mx-auto mt-6 max-w-sm">
-                <FileText size={40} className="mx-auto text-volt" />
-                <p className="mt-3 text-sm font-medium text-ink">Boleto gerado</p>
-                <a
-                  href={state.payment.boletoUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-3 inline-block rounded-sm bg-volt px-5 py-2.5 text-sm font-medium text-base transition-colors hover:bg-volt-dim"
-                >
-                  Ver boleto
-                </a>
-              </div>
-            )}
 
             <div className="mt-8 flex justify-center gap-3">
               <Link
@@ -403,25 +381,24 @@ export default function CheckoutForm({
             <h2 className="text-sm font-medium text-ink">Pagamento</h2>
           </div>
           <div className="space-y-4 px-5 py-4">
-            <div>
-              <span className="text-xs text-ink-soft">Forma de pagamento</span>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {/* Nova Seleção de Pagamento */}
+            <div className="space-y-4">
+              <span className="text-sm font-medium text-ink">Escolha como pagar</span>
+              <div className="grid gap-3 sm:grid-cols-3">
                 {Object.entries(PAYMENT_LABELS).map(([value, label]) => (
                   <label
                     key={value}
-                    className="flex cursor-pointer items-center gap-2 rounded-sm border border-base-line bg-base px-3 py-3 transition-colors has-[:checked]:border-volt/60 has-[:checked]:bg-volt/5"
+                    className="relative flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-base-line bg-base p-4 transition-all hover:border-volt/60 has-[:checked]:border-volt has-[:checked]:bg-volt/5"
                   >
                     <input
                       type="radio"
                       name="paymentMethod"
                       value={value}
                       defaultChecked={value === "PIX"}
-                      className="rounded-full border-base-line text-volt focus:ring-volt"
+                      className="peer absolute opacity-0"
                     />
-                    <span className="flex items-center gap-1.5 text-sm text-ink">
-                      {PAYMENT_ICONS[value]}
-                      {label}
-                    </span>
+                    <div className="text-volt">{PAYMENT_ICONS[value]}</div>
+                    <span className="text-xs font-medium text-ink">{label}</span>
                   </label>
                 ))}
               </div>
