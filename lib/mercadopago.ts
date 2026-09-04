@@ -136,33 +136,45 @@ export async function createMercadoPagoPayment(params: {
 
   const idempotencyKey = `order-${orderId}-${Date.now()}`;
 
-  const response = await fetch("https://api.mercadopago.com/v1/payments", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${ACCESS_TOKEN}`,
-      "X-Idempotency-Key": idempotencyKey,
-    },
-    body: JSON.stringify(body),
-  });
+  try {
+    const response = await fetch("https://api.mercadopago.com/v1/payments", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${ACCESS_TOKEN}`,
+        "X-Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify(body),
+    });
 
-  if (!response.ok) {
-    const err = await response.text();
-    console.error("[MercadoPago] Erro ao criar pagamento:", response.status, err);
-    throw new Error(`Erro ao criar pagamento: ${response.status}`);
+    if (!response.ok) {
+      const err = await response.text();
+      console.error(
+        "[MercadoPago] Erro ao criar pagamento:",
+        response.status,
+        err
+      );
+      // Não deixa o site quebrar por falha do gateway. Cai em modo simulação
+      // e o pedido continua como PENDING. O erro é logado para diagnóstico.
+      return createSimulatedPayment(amount, method, orderId, installments);
+    }
+
+    const data: MercadoPagoPaymentResponse = await response.json();
+
+    return {
+      method,
+      externalPaymentId: String(data.id),
+      pixCode: data.point_of_interaction?.transaction_data?.qr_code,
+      pixQrCodeBase64: data.point_of_interaction?.transaction_data?.qr_code_base64,
+      boletoUrl: data.transaction_details?.external_resource_url,
+      installments: method === "CREDIT_CARD" ? installments : undefined,
+      simulated: false,
+    };
+  } catch (error) {
+    // Erro de rede/parse: nunca derruba o checkout.
+    console.error("[MercadoPago] Exceção ao criar pagamento:", error);
+    return createSimulatedPayment(amount, method, orderId, installments);
   }
-
-  const data: MercadoPagoPaymentResponse = await response.json();
-
-  return {
-    method,
-    externalPaymentId: String(data.id),
-    pixCode: data.point_of_interaction?.transaction_data?.qr_code,
-    pixQrCodeBase64: data.point_of_interaction?.transaction_data?.qr_code_base64,
-    boletoUrl: data.transaction_details?.external_resource_url,
-    installments: method === "CREDIT_CARD" ? installments : undefined,
-    simulated: false,
-  };
 }
 
 // ---------------------------------------------------------------------------
