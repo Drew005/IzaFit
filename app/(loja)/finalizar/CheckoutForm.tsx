@@ -99,11 +99,33 @@ export default function CheckoutForm({
   const [state, formAction] = useFormState(checkout, null);
   const [couponCode, setCouponCode] = useState("");
   const [couponResult, setCouponResult] = useState<{
+    code: string;
     discount: number;
     newTotal: number;
     message: string;
   } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
+
+  const applyCoupon = async () => {
+    const code = couponCode.trim();
+    if (!code) return;
+    setValidatingCoupon(true);
+    try {
+      const result = await validateCoupon(code, subtotal);
+      if ("error" in result) {
+        setCouponError(result.error || "Erro desconhecido");
+        setCouponResult(null);
+      } else {
+        setCouponResult(result);
+        setCouponError(null);
+      }
+    } catch (e) {
+      setCouponError("Erro ao validar cupom.");
+    } finally {
+      setValidatingCoupon(false);
+    }
+  };
 
   useEffect(() => {
     if (!couponCode) {
@@ -395,15 +417,43 @@ export default function CheckoutForm({
               </div>
             </div>
 
-            <label className="block">
+            <div>
               <span className="text-xs text-ink-soft">Cupom de desconto</span>
-              <input
-                name="couponCode"
-                type="text"
-                placeholder="Ex: IZAFIT10"
-                className="mt-1 w-full rounded-sm border border-base-line bg-base px-3 py-2 text-sm text-ink uppercase focus:border-volt focus:outline-none"
-              />
-            </label>
+              <div className="mt-1 flex gap-2">
+                <input
+                  name="couponCode"
+                  type="text"
+                  value={couponCode}
+                  onChange={(event) => {
+                    setCouponCode(event.target.value.toUpperCase());
+                    setCouponResult(null);
+                    setCouponError(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void applyCoupon();
+                    }
+                  }}
+                  placeholder="Ex: IZAFIT10"
+                  className="min-w-0 flex-1 rounded-sm border border-base-line bg-base px-3 py-2 text-sm text-ink uppercase focus:border-volt focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => void applyCoupon()}
+                  disabled={validatingCoupon || !couponCode.trim()}
+                  className="shrink-0 rounded-sm border border-volt/50 px-3 py-2 text-xs font-medium text-volt transition-colors hover:bg-volt/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {validatingCoupon ? "Validando..." : "Aplicar cupom"}
+                </button>
+              </div>
+              {couponResult && (
+                <p className="mt-2 text-xs text-volt">{couponResult.message}</p>
+              )}
+              {couponError && (
+                <p className="mt-2 text-xs text-alert">{couponError}</p>
+              )}
+            </div>
           </div>
         </section>
       </div>
@@ -416,10 +466,25 @@ export default function CheckoutForm({
             <dt className="text-ink-soft">Subtotal</dt>
             <dd className="text-ink">{currency(subtotal)}</dd>
           </div>
-          <div className="flex justify-between">
-            <dt className="text-ink-soft">Desconto</dt>
-            <dd className="text-ink-soft">Aplicado na confirmação</dd>
-          </div>
+          {couponResult ? (
+            <>
+              <div className="flex justify-between">
+                <dt className="text-ink-soft">
+                  Cupom <span className="font-medium text-volt">{couponResult.code}</span>
+                </dt>
+                <dd className="text-volt">-{currency(couponResult.discount)}</dd>
+              </div>
+              <div className="flex justify-between border-t border-base-line pt-2">
+                <dt className="font-medium text-ink">Total</dt>
+                <dd className="font-display text-lg font-bold text-ink">{currency(couponResult.newTotal)}</dd>
+              </div>
+            </>
+          ) : (
+            <div className="flex justify-between">
+              <dt className="text-ink-soft">Total</dt>
+              <dd className="font-display text-lg font-bold text-ink">{currency(subtotal)}</dd>
+            </div>
+          )}
           <div className="flex justify-between">
             <dt className="text-ink-soft">Frete</dt>
             <dd className="text-ink-soft">Combinar</dd>
