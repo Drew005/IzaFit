@@ -174,6 +174,20 @@ export async function checkout(
     installments: 1,
   });
 
+  // Grava o ID externo do gateway no pagamento para casar com o webhook.
+  await prisma.payment.updateMany({
+    where: { orderId: order.id },
+    data: {
+      gatewayId: payResult.externalPaymentId,
+      gatewayMeta: {
+        pixCode: payResult.pixCode ?? null,
+        pixQrCodeBase64: payResult.pixQrCodeBase64 ?? null,
+        boletoUrl: payResult.boletoUrl ?? null,
+        simulated: payResult.simulated,
+      },
+    },
+  });
+
   revalidatePath("/perfil");
   return {
     success: "Pedido realizado com sucesso!",

@@ -12,6 +12,7 @@ import {
   validateWebhookSignature,
   getMercadoPagoPayment,
 } from "@/lib/mercadopago";
+import { StockMovementType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 // Mapeamento dos status do Mercado Pago para o nosso sistema.
@@ -68,20 +69,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    const orderId = payload.data?.external_reference;
-    if (!orderId) {
-      return NextResponse.json({ ok: true });
-    }
+    // Localiza o pagamento interno pelo gatewayId (campo mais confiável).
+    const internalPayment = await prisma.payment.findUnique({
+      where: { gatewayId: String(paymentId) },
+      select: { orderId: true },
+    });
 
-    // Busca o pedido e pagamento no banco
+    // Fallback: usa o external_reference (orderId) quando o gatewayId não confere.
+    const resolvedOrderId =
+      internalPayment?.orderId ??
+      (payload.data?.external_reference as string | undefined) ??
+      "";
+
     const order = await prisma.order.findUnique({
-      where: { id: orderId },
+      where: { id: resolvedOrderId },
       include: { payments: true, items: true },
     });
 
     if (!order) {
       return NextResponse.json({ ok: true });
     }
+
+    const orderId = order.id;
 
     const newOrderStatus = STATUS_MAP[mpPayment.status] as
       | "PENDING"
@@ -133,7 +142,7 @@ export async function POST(request: NextRequest) {
           await tx.stockMovement.create({
             data: {
               variantId: item.variantId,
-              type: "SALE_OUT",
+              type: StockMovementType.SALE_OUT,
               quantity: item.quantity,
               reason: `Venda online (pedido ${orderId.slice(-6)})`,
               referenceId: orderId,
@@ -180,7 +189,7 @@ export async function POST(request: NextRequest) {
           await tx.stockMovement.create({
             data: {
               variantId: item.variantId,
-              type: "RETURN_IN",
+              type: StockMovementType.RETURN_IN,
               quantity: item.quantity,
               reason: `Cancelamento via webhook Mercado Pago (pedido ${orderId.slice(-6)})`,
               referenceId: orderId,
