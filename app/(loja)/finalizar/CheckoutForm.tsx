@@ -176,33 +176,43 @@ export default function CheckoutForm({
                 : "Seu pagamento foi gerado. Conclua o pagamento abaixo para confirmar o pedido."}
             </p>
 
-            {state.payment?.method === "PIX" && (
-              <div className="mx-auto mt-6 max-w-sm">
-                {state.payment.pixQrCodeBase64 && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={state.payment.pixQrCodeBase64}
-                    alt="QR Code PIX"
-                    className="mx-auto h-48 w-48 rounded-sm border border-base-line bg-white object-contain"
-                  />
-                )}
-                <p className="mt-4 text-sm font-medium text-ink">
-                  Pague com PIX (copia e cola)
-                </p>
-                {state.payment.pixCode && (
-                  <div className="mt-2 flex items-center gap-2 rounded-sm border border-base-line bg-base px-3 py-2 text-left">
-                    <code className="flex-1 truncate text-xs text-ink-soft">
-                      {state.payment.pixCode}
-                    </code>
-                    <CopyButton text={state.payment.pixCode} />
-                  </div>
-                )}
-                <p className="mt-3 text-xs text-ink-soft">
-                  O pedido é aprovado automaticamente após a confirmação do
-                  pagamento peta instituição.
-                </p>
-              </div>
-            )}
+            {/* Detalhes do Pagamento */}
+            <div className="mt-6">
+              {state.payment?.method === "PIX" && (
+                <div className="mx-auto max-w-sm text-center">
+                  {state.payment.pixQrCodeBase64 && (
+                    <img
+                      src={state.payment.pixQrCodeBase64}
+                      alt="QR Code PIX"
+                      className="mx-auto h-48 w-48 rounded-sm border border-base-line bg-white object-contain"
+                    />
+                  )}
+                  <p className="mt-4 text-sm font-medium text-ink">PIX (Copia e Cola)</p>
+                  {state.payment.pixCode && (
+                    <div className="mt-2 flex items-center gap-2 rounded-sm border border-base-line bg-base px-3 py-2 text-left">
+                      <code className="flex-1 truncate text-xs text-ink-soft">
+                        {state.payment.pixCode}
+                      </code>
+                      <CopyButton text={state.payment.pixCode} />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {state.payment?.method === "BOLETO" && state.payment.boletoUrl && (
+                <div className="text-center">
+                  <a
+                    href={state.payment.boletoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-sm bg-volt px-5 py-2.5 text-sm font-medium text-base transition-colors hover:bg-volt-dim"
+                  >
+                    <FileText size={16} />
+                    Ver boleto simulado
+                  </a>
+                </div>
+              )}
+            </div>
 
             {state.payment?.method === "CREDIT_CARD" && (
               <div className="mx-auto mt-6 max-w-sm">
