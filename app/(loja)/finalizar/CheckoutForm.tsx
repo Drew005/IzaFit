@@ -15,6 +15,7 @@ import {
   Check,
 } from "lucide-react";
 import { useCart } from "@/components/store/CartProvider";
+import { checkout } from "@/lib/checkout";
 import { validateCoupon } from "@/lib/actions/coupon";
 import { currency } from "@/lib/format";
 
@@ -95,6 +96,7 @@ export default function CheckoutForm({
   addresses: Address[];
 }) {
   const { items, subtotal, clear } = useCart();
+  const [state, formAction] = useFormState(checkout, null);
   const [couponCode, setCouponCode] = useState("");
   const [couponResult, setCouponResult] = useState<{
     discount: number;
@@ -114,7 +116,7 @@ export default function CheckoutForm({
       try {
         const result = await validateCoupon(couponCode, subtotal);
         if ("error" in result) {
-          setCouponError(result.error);
+          setCouponError(result.error || "Erro desconhecido");
           setCouponResult(null);
         } else {
           setCouponResult(result);
