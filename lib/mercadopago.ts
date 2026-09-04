@@ -2,9 +2,7 @@
 // MERCADO PAGO — Checkout Transparente (PIX, Cartão de Crédito, Boleto)
 // =============================================================================
 // Este módulo gerencia a criação e consulta de pagamentos via Mercado Pago.
-// Se as credenciais não estiverem configuradas no .env, o sistema entra em
-// modo de SIMULAÇÃO — gera dados fictícios para PIX/carta/boleto sem chamar
-// a API real. Assim o site nunca quebra por falta de credenciais.
+// Requer credenciais configuradas no .env (ACCESS_TOKEN + PUBLIC_KEY para cartão).
 // =============================================================================
 
 // ---------------------------------------------------------------------------
@@ -55,7 +53,7 @@ export interface MercadoPagoPaymentResponse {
 export interface CheckoutPaymentResult {
   /** Método de pagamento escolhido */
   method: "PIX" | "CREDIT_CARD" | "BOLETO";
-  /** ID externo do pagamento (pode ser numérico do MP ou string simulada) */
+  /** ID externo do pagamento (numérico do Mercado Pago) */
   externalPaymentId: string;
   /** Código PIX "copia e cola" */
   pixCode?: string;
@@ -65,8 +63,6 @@ export interface CheckoutPaymentResult {
   boletoUrl?: string;
   /** Quantidade de parcelas */
   installments?: number;
-  /** Se o pagamento foi simulado (sem credenciais reais) */
-  simulated: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +80,6 @@ const WEBHOOK_SECRET = process.env.MERCADO_PAGO_WEBHOOK_SECRET ?? "";
 
 /**
  * Retorna true se o Mercado Pago estiver configurado com credenciais reais.
- * Se false, o sistema opera em modo de simulação.
  */
 export function isMercadoPagoConfigured(): boolean {
   return ACCESS_TOKEN.length > 0;
@@ -92,7 +87,6 @@ export function isMercadoPagoConfigured(): boolean {
 
 /**
  * Retorna a chave pública (usada no front-end pelo Card Payment Brick).
- * Pode ser vazia — o front-end deve tratar a ausência dela com simulação.
  */
 export function getMercadoPagoPublicKey(): string {
   return PUBLIC_KEY;
@@ -112,7 +106,7 @@ export function isCardPaymentConfigured(): boolean {
 
 /**
  * Cria um pagamento no Mercado Pago.
- * Se não houver credenciais configuradas, retorna dados simulados.
+ * Lança erro se a API falhar (sem fallback de simulação).
  *
  * @param params - Parâmetros do pagamento
  * @param params.amount - Valor em centavos
@@ -133,17 +127,16 @@ export async function createMercadoPagoPayment(params: {
 }): Promise<CheckoutPaymentResult> {
   const { amount, description, method, payerEmail, payerCpf, orderId, installments } = params;
 
+  // Garante que tem credenciais configuradas
   if (!isMercadoPagoConfigured()) {
-    // ── Modo simulação ──
-    return createSimulatedPayment(amount, method, orderId, installments);
+    throw new Error("MERCADO_PAGO_ACCESS_TOKEN não configurado no ambiente");
   }
 
-  // ── Modo real: chama a API do Mercado Pago ──
   const mpMethodId =
     method === "PIX" ? "pix" : method === "CREDIT_CARD" ? "credit_card" : "bank_transfer";
 
   const body: Record<string, unknown> = {
-    transaction_amount: amount / 100, // API aceita em reais
+    transaction_amount: amount / 100,
     description,
     payment_method_id: mpMethodId,
     payer: {
@@ -158,45 +151,32 @@ export async function createMercadoPagoPayment(params: {
 
   const idempotencyKey = `order-${orderId}-${Date.now()}`;
 
-  try {
-    const response = await fetch("https://api.mercadopago.com/v1/payments", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${ACCESS_TOKEN}`,
-        "X-Idempotency-Key": idempotencyKey,
-      },
-      body: JSON.stringify(body),
-    });
+  const response = await fetch("https://api.mercadopago.com/v1/payments", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${ACCESS_TOKEN}`,
+      "X-Idempotency-Key": idempotencyKey,
+    },
+    body: JSON.stringify(body),
+  });
 
-    if (!response.ok) {
-      const err = await response.text();
-      console.error(
-        "[MercadoPago] Erro ao criar pagamento:",
-        response.status,
-        err
-      );
-      // Não deixa o site quebrar por falha do gateway. Cai em modo simulação
-      // e o pedido continua como PENDING. O erro é logado para diagnóstico.
-      return createSimulatedPayment(amount, method, orderId, installments);
-    }
-
-    const data: MercadoPagoPaymentResponse = await response.json();
-
-    return {
-      method,
-      externalPaymentId: String(data.id),
-      pixCode: data.point_of_interaction?.transaction_data?.qr_code,
-      pixQrCodeBase64: data.point_of_interaction?.transaction_data?.qr_code_base64,
-      boletoUrl: data.transaction_details?.external_resource_url,
-      installments: method === "CREDIT_CARD" ? installments : undefined,
-      simulated: false,
-    };
-  } catch (error) {
-    // Erro de rede/parse: nunca derruba o checkout.
-    console.error("[MercadoPago] Exceção ao criar pagamento:", error);
-    return createSimulatedPayment(amount, method, orderId, installments);
+  if (!response.ok) {
+    const err = await response.text();
+    console.error("[MercadoPago] Erro ao criar pagamento:", response.status, err);
+    throw new Error(`Mercado Pago ${response.status}: ${err}`);
   }
+
+  const data: MercadoPagoPaymentResponse = await response.json();
+
+  return {
+    method,
+    externalPaymentId: String(data.id),
+    pixCode: data.point_of_interaction?.transaction_data?.qr_code,
+    pixQrCodeBase64: data.point_of_interaction?.transaction_data?.qr_code_base64,
+    boletoUrl: data.transaction_details?.external_resource_url,
+    installments: method === "CREDIT_CARD" ? installments : undefined,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -223,15 +203,9 @@ export async function createMercadoPagoOrder(params: {
   gatewayId: string;
   status: string;
   statusDetail?: string;
-  simulated: boolean;
 }> {
   if (!isMercadoPagoConfigured()) {
-    return {
-      gatewayId: `sim-order-${params.orderId.slice(-8)}`,
-      status: "processed",
-      statusDetail: "accredited",
-      simulated: true,
-    };
+    throw new Error("MERCADO_PAGO_ACCESS_TOKEN não configurado no ambiente");
   }
 
   const total = (params.amount / 100).toFixed(2);
@@ -281,12 +255,7 @@ export async function createMercadoPagoOrder(params: {
     if (!response.ok) {
       const err = await response.text();
       console.error("[MercadoPago] Erro ao criar order (cartão):", response.status, err);
-      return {
-        gatewayId: `sim-order-${params.orderId.slice(-8)}`,
-        status: "processed",
-        statusDetail: "simulated",
-        simulated: true,
-      };
+      throw new Error(`Mercado Pago ${response.status}: ${err}`);
     }
 
     const data = await response.json();
@@ -296,16 +265,10 @@ export async function createMercadoPagoOrder(params: {
       gatewayId: String(data?.id ?? payment?.id ?? `order-${params.orderId.slice(-8)}`),
       status: payment?.status ?? data?.status ?? "pending",
       statusDetail: payment?.status_detail ?? data?.status_detail,
-      simulated: false,
     };
   } catch (error) {
     console.error("[MercadoPago] Exceção ao criar order (cartão):", error);
-    return {
-      gatewayId: `sim-order-${params.orderId.slice(-8)}`,
-      status: "processed",
-      statusDetail: "simulated",
-      simulated: true,
-    };
+    throw error;
   }
 }
 
@@ -320,7 +283,7 @@ export async function getMercadoPagoPayment(
   mpPaymentId: string | number
 ): Promise<{ status: string; statusDetail: string } | null> {
   if (!isMercadoPagoConfigured()) {
-    return null; // Em modo simulação não há o que consultar
+    return null;
   }
 
   const response = await fetch(
@@ -342,92 +305,17 @@ export async function getMercadoPagoPayment(
 
 /**
  * Valida o signature do webhook do Mercado Pago.
- * Retorna true se válido ou se não houver segredo configurado (modo simulação).
+ * Retorna true se válido ou se não houver segredo configurado.
  */
 export function validateWebhookSignature(
   body: string,
   signature: string | null
 ): boolean {
-  if (!WEBHOOK_SECRET) return true; // Sem segredo configurado, aceita qualquer notificação
+  if (!WEBHOOK_SECRET) return true;
   // A validação real usa HMAC-SHA256. Implementação básica:
   // Em produção, usar crypto.createHmac('sha256', WEBHOOK_SECRET).update(body).digest('hex')
   if (!signature) return false;
   return signature.includes(WEBHOOK_SECRET);
-}
-
-// ---------------------------------------------------------------------------
-// Pagamento simulado (fallback quando não há credenciais)
-// ---------------------------------------------------------------------------
-
-/**
- * Gera dados de pagamento simulados para o checkout.
- * Exportado para que o checkout possa concluir o fluxo do cartão em modo
- * demonstração sem depender do Brick (que exige chave pública configurada).
- */
-export function createSimulatedPayment(
-  amount: number,
-  method: "PIX" | "CREDIT_CARD" | "BOLETO",
-  orderId: string,
-  installments?: number
-): CheckoutPaymentResult {
-  const simulatedId = `sim-${orderId.slice(-8)}-${Date.now()}`;
-
-  if (method === "PIX") {
-    const pixCode = generateSimulatedPixCode(orderId, amount);
-    // QR Code em base64: gera uma imagem SVG simples como placeholder
-    const qrSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
-      <rect width="300" height="300" fill="white"/>
-      <text x="150" y="140" text-anchor="middle" font-size="14" fill="#333">QR Code PIX</text>
-      <text x="150" y="165" text-anchor="middle" font-size="10" fill="#666">(modo simulação)</text>
-      <text x="150" y="190" text-anchor="middle" font-size="11" fill="#999">Valor: R$ ${(amount / 100).toFixed(2)}</text>
-    </svg>`;
-    const qrBase64 = `data:image/svg+xml;base64,${Buffer.from(qrSvg).toString("base64")}`;
-
-    return {
-      method: "PIX",
-      externalPaymentId: simulatedId,
-      pixCode,
-      pixQrCodeBase64: qrBase64,
-      simulated: true,
-    };
-  }
-
-  if (method === "CREDIT_CARD") {
-    return {
-      method: "CREDIT_CARD",
-      externalPaymentId: simulatedId,
-      installments: installments ?? 1,
-      simulated: true,
-    };
-  }
-
-  // BOLETO
-  return {
-    method: "BOLETO",
-    externalPaymentId: simulatedId,
-    boletoUrl: `https://www.mercadopago.com.br/boleto/preview/simulado?id=${simulatedId}`,
-    simulated: true,
-  };
-}
-
-/**
- * Gera um código PIX simulado (payload baseado no padrão EMV).
- * Em modo simulação, não precisa ser escaneável, apenas ilustrativo.
- */
-function generateSimulatedPixCode(orderId: string, amount: number): string {
-  const shortId = orderId.slice(-12).replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-  const amountStr = (amount / 100).toFixed(2);
-  return (
-    "000201" + // Payload Format Indicator
-    "2683" + // Merchant Account Info length
-    "0014br.gov.bcb.pix" + // GUI
-    "0136IZAFIT-" + shortId + // Chave PIX simulada
-    "52040000" + // Merchant Category Code
-    "5303986" + // Transaction Currency (BRL)
-    "54" + amountStr.padStart(4, "0") + // Amount
-    "5802BR" + // Country Code
-    "6304" // CRC16 placeholder
-  );
 }
 
 /** Valor em centavos — helper para converter de R$ para centavos */

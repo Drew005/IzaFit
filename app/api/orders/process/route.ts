@@ -96,7 +96,6 @@ export async function POST(request: NextRequest) {
       data: {
         gatewayId: mpResult.gatewayId,
         gatewayMeta: {
-          simulated: mpResult.simulated,
           statusDetail: mpResult.statusDetail ?? null,
           card: {
             paymentMethodId,
@@ -145,7 +144,6 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    simulated: mpResult.simulated,
     status: newPaymentStatus,
     message: approved
       ? "Pagamento aprovado!"

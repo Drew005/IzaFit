@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentCustomer } from "@/lib/customer-auth";
 import { findEligibleGifts } from "@/lib/gift-eligibility";
-import { createMercadoPagoPayment, createSimulatedPayment, isCardPaymentConfigured, type CheckoutPaymentResult } from "@/lib/mercadopago";
+import { createMercadoPagoPayment, isCardPaymentConfigured, type CheckoutPaymentResult } from "@/lib/mercadopago";
 import { CouponType, PaymentMethod } from "@prisma/client";
 
 /**
@@ -158,7 +158,7 @@ export async function checkout(
     return created;
   });
 
-  // ── Criar pagamento no Mercado Pago (ou simulação) ──
+  // ── Criar pagamento no Mercado Pago ──
   // O checkout transparente só aceita PIX, cartão de crédito ou boleto.
   // Qualquer outro método cai em PIX como fallback seguro.
   const mpMethod =
@@ -172,36 +172,16 @@ export async function checkout(
   // via /api/orders/process, porque o token do cartão só existe lá. Aqui
   // apenas criamos o pedido e o pagamento como PENDING e devolvemos o orderId
   // para o CheckoutForm renderizar o Brick.
-  if (mpMethod === "CREDIT_CARD" && isCardPaymentConfigured()) {
+  if (mpMethod === "CREDIT_CARD") {
+    if (!isCardPaymentConfigured()) {
+      return { error: "Pagamento por cartão não configurado. Configure ACCESS_TOKEN e PUBLIC_KEY." };
+    }
     revalidatePath("/perfil");
     return {
       success: "Pedido criado. Finalize o cartão para confirmar.",
       orderId: order.id,
       requiresCardProcessing: true,
       orderTotal: Math.round(Number(order.total) * 100),
-    };
-  }
-
-  // CARTAO sem credenciais completas (sem Brick disponível): conclui o fluxo
-  // em modo demonstração para o checkout nunca ficar travado em PENDING.
-  if (mpMethod === "CREDIT_CARD") {
-    const simResult = createSimulatedPayment(
-      Math.round(Number(order.total) * 100),
-      "CREDIT_CARD",
-      order.id
-    );
-    await prisma.payment.updateMany({
-      where: { orderId: order.id },
-      data: {
-        gatewayId: simResult.externalPaymentId,
-        gatewayMeta: { simulated: true },
-      },
-    });
-    revalidatePath("/perfil");
-    return {
-      success: "Pedido realizado com sucesso!",
-      orderId: order.id,
-      payment: simResult,
     };
   }
 
@@ -224,7 +204,6 @@ export async function checkout(
         pixCode: payResult.pixCode ?? null,
         pixQrCodeBase64: payResult.pixQrCodeBase64 ?? null,
         boletoUrl: payResult.boletoUrl ?? null,
-        simulated: payResult.simulated,
       },
     },
   });

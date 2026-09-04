@@ -12,8 +12,8 @@ Implementar o pagamento com **cartão de crédito** do Mercado Pago Checkout Tra
   - `isMercadoPagoConfigured()` — detecta ACCESS_TOKEN
   - `getMercadoPagoPublicKey()` — retorna PUBLIC_KEY
   - `isCardPaymentConfigured()` — requer ACCESS_TOKEN + PUBLIC_KEY
-  - `createMercadoPagoPayment()` — PIX/boleto via `/v1/payments` (com fallback simulação)
-  - **`createMercadoPagoOrder()`** (NOVO) — cartão via `/v1/orders` (Orders API), com fallback simulação
+  - `createMercadoPagoPayment()` — PIX/boleto via `/v1/payments` (sem fallback — lança erro)
+  - **`createMercadoPagoOrder()`** (NOVO) — cartão via `/v1/orders` (Orders API, sem fallback — lança erro)
   - `getMercadoPagoPayment()`, `validateWebhookSignature()`
 
 - **`app/api/orders/process/route.ts`** (NOVO) — endpoint Post:
@@ -24,7 +24,7 @@ Implementar o pagamento com **cartão de crédito** do Mercado Pago Checkout Tra
   - Atualiza Payment (gatewayId, gatewayMeta) e Order status
   - Se aprovado → baixa estoque + pontos fidelidade (igual webhook)
   - **Chama `revalidatePath`** para admin/vendas/financeiro/estoque/perfil (igual webhook)
-  - Retorna `{ ok, simulated, status, message }`
+  - Retorna `{ ok, status, message }`
 
 - **`components/store/CardPaymentBrick.tsx`** (NOVO) — client component:
   - Recebe a **`publicKey` como prop** (vinda do servidor) — não lê env no client
@@ -36,7 +36,7 @@ Implementar o pagamento com **cartão de crédito** do Mercado Pago Checkout Tra
   - Cleanup: `unmount()` no unmount
 
 - **`lib/checkout.ts`**: para `CREDIT_CARD`, NÃO chama mais `createMercadoPagoPayment`. Apenas cria pedido+payment PENDING e retorna `{ orderId, requiresCardProcessing: true }`.
-  - Se **não** houver credenciais de cartão (sem Brick), conclui em **modo demonstração** (pedido + `payment` simulado) para nunca travar em PENDING.
+  - Se não houver credenciais de cartão → retorna erro (sem simulação).
   - Retorna `orderTotal` (centavos) para o Brick usar após o carrinho ser limpo.
 
 - **`app/(loja)/finalizar/page.tsx`** (server) lê a chave pública e passa como prop (robusto a nome: `NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY` ou `MERCADO_PAGO_PUBLIC_KEY`).

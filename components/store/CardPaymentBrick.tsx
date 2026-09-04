@@ -9,7 +9,6 @@ type CardPaymentBrickProps = {
   publicKey: string;
   onProcessed: (result: {
     ok: boolean;
-    simulated?: boolean;
     message?: string;
   }) => void;
   onError: (message: string) => void;
@@ -33,7 +32,7 @@ type MercadoPagoWindow = Window & {
  * é enviado ao backend via /api/orders/process.
  *
  * Se a PUBLIC_KEY não estiver configurada, não chama o SDK e informa o pai
- * que o pagamento estará em modo simulação.
+ * que o cartão não está disponível.
  */
 export default function CardPaymentBrick({
   amount,

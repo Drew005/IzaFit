@@ -167,14 +167,12 @@ export default function CheckoutForm({
   // Estado do processamento do cartão (Card Payment Brick)
   const [cardResult, setCardResult] = useState<{
     ok: boolean;
-    simulated?: boolean;
     message?: string;
   } | null>(null);
   const [cardError, setCardError] = useState<string | null>(null);
 
   const handleCardProcessed = (result: {
     ok: boolean;
-    simulated?: boolean;
     message?: string;
   }) => {
     setCardResult(result);
@@ -203,9 +201,7 @@ export default function CheckoutForm({
             <p className="mt-2 text-sm text-ink-soft">
               {state.requiresCardProcessing
                 ? "Informe os dados do cartão abaixo para concluir o pagamento."
-                : state.payment?.simulated
-                  ? "Pagamento em modo de demonstração — finalize para concluir a compra."
-                  : "Seu pagamento foi gerado. Conclua o pagamento abaixo para confirmar o pedido."}
+                : "Seu pagamento foi gerado. Conclua o pagamento abaixo para confirmar o pedido."}
             </p>
 
             {/* Detalhes do Pagamento */}
@@ -258,15 +254,8 @@ export default function CheckoutForm({
                     <div className="rounded-sm border border-volt/40 bg-volt/10 p-4">
                       <p className="flex items-center justify-center gap-2 font-medium text-ink">
                         <CheckCircle2 size={18} className="text-volt" />
-                        {cardResult.simulated
-                          ? "Pagamento simulado (modo demonstração)."
-                          : cardResult.message ?? "Pagamento aprovado!"}
+                        {cardResult.message ?? "Pagamento aprovado!"}
                       </p>
-                      {cardResult.simulated && (
-                        <p className="mt-1 text-center text-xs text-ink-soft">
-                          Nenhum valor foi cobrado.
-                        </p>
-                      )}
                     </div>
                   ) : (
                     <CardPaymentBrick
