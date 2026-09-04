@@ -81,6 +81,16 @@ export async function POST(request: NextRequest) {
       installments: Math.max(1, installments),
       payerEmail: customer.email || "",
       payerCpf: customer.cpf || undefined,
+      payerName: customer.name || undefined,
+      payerAddress: {
+        zipCode: order.shippingZipCode ?? undefined,
+        street: order.shippingStreet ?? undefined,
+        number: order.shippingNumber ?? undefined,
+        complement: order.shippingComplement ?? undefined,
+        district: order.shippingDistrict ?? undefined,
+        city: order.shippingCity ?? undefined,
+        state: order.shippingState ?? undefined,
+      },
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro desconhecido ao processar pagamento.";

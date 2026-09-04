@@ -187,12 +187,30 @@ export async function checkout(
 
   let payResult;
   try {
+    // Boleto exige nome completo e CPF do cliente na Orders API — falha cedo
+    // com mensagem amigável (o catch abaixo cancela o pedido e informa o cliente).
+    if (mpMethod === "BOLETO" && (!customer.name?.trim() || !customer.cpf)) {
+      throw new Error(
+        "Para pagar com boleto, preencha seu nome completo e CPF em /perfil."
+      );
+    }
+
     payResult = await createMercadoPagoPayment({
       amount: Math.round(Number(order.total) * 100),
       description: `IzaFit — Pedido #${order.id.slice(-6).toUpperCase()}`,
       method: mpMethod,
       payerEmail: customer.email || "",
       payerCpf: customer.cpf || undefined,
+      payerName: customer.name || undefined,
+      payerAddress: {
+        zipCode: order.shippingZipCode ?? undefined,
+        street: order.shippingStreet ?? undefined,
+        number: order.shippingNumber ?? undefined,
+        complement: order.shippingComplement ?? undefined,
+        district: order.shippingDistrict ?? undefined,
+        city: order.shippingCity ?? undefined,
+        state: order.shippingState ?? undefined,
+      },
       orderId: order.id,
       installments: 1,
     });

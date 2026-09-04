@@ -250,6 +250,73 @@ export function getMercadoPagoCredentialInfo(): {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers de payload (Orders API)
+// ---------------------------------------------------------------------------
+
+/**
+ * Normaliza um base64 de imagem vindo da API. A Orders API devolve o
+ * qr_code_base64 sem o prefixo `data:image/png;base64,` — sem ele o <img>
+ * renderiza em branco. Se já vier com prefixo data URI, mantém como está.
+ */
+function normalizeImageDataUri(value?: string): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return /^data:image\//i.test(trimmed)
+    ? trimmed
+    : `data:image/png;base64,${trimmed}`;
+}
+
+/**
+ * Monta o objeto `payer` da Orders API a partir dos dados do cliente.
+ * Nome completo e endereço são obrigatórios para boleto e ajudam na taxa
+ * de aprovação dos demais métodos.
+ */
+function buildPayerObject(params: {
+  email: string;
+  cpf?: string;
+  name?: string;
+  address?: {
+    zipCode?: string;
+    street?: string;
+    number?: string;
+    complement?: string;
+    district?: string;
+    city?: string;
+    state?: string;
+  };
+}): Record<string, unknown> {
+  const payer: Record<string, unknown> = { email: params.email };
+
+  if (params.cpf) {
+    payer.identification = {
+      type: "CPF",
+      number: params.cpf.replace(/\D/g, ""),
+    };
+  }
+
+  const nameParts = (params.name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (nameParts.length > 0) {
+    payer.first_name = nameParts[0];
+    payer.last_name = nameParts.slice(1).join(" ") || nameParts[0];
+  }
+
+  if (params.address) {
+    payer.address = {
+      zip_code: params.address.zipCode?.replace(/\D/g, "") ?? undefined,
+      street_name: params.address.street ?? undefined,
+      street_number: params.address.number ?? undefined,
+      complement: params.address.complement ?? undefined,
+      neighborhood: params.address.district ?? undefined,
+      city: params.address.city ?? undefined,
+      state: params.address.state ?? undefined,
+    };
+  }
+
+  return payer;
+}
+
+// ---------------------------------------------------------------------------
 // Criação de pagamento via Orders API
 // ---------------------------------------------------------------------------
 
@@ -274,6 +341,16 @@ export async function createMercadoPagoPayment(params: {
   method: "PIX" | "CREDIT_CARD" | "BOLETO";
   payerEmail: string;
   payerCpf?: string;
+  payerName?: string;
+  payerAddress?: {
+    zipCode?: string;
+    street?: string;
+    number?: string;
+    complement?: string;
+    district?: string;
+    city?: string;
+    state?: string;
+  };
   orderId: string; // external_reference
   installments?: number;
   cardToken?: string;
@@ -286,6 +363,8 @@ export async function createMercadoPagoPayment(params: {
     method,
     payerEmail,
     payerCpf,
+    payerName,
+    payerAddress,
     orderId,
     installments,
     cardToken,
@@ -301,6 +380,22 @@ export async function createMercadoPagoPayment(params: {
   // Mapeia método interno para payment_method da Orders API
   let mpPaymentMethodId: string;
   let mpPaymentTypeId: string;
+
+  // Boleto exige nome completo, CPF e endereço do pagador na Orders API.
+  // Falha rápido com mensagem amigável (o checkout cancela o pedido no catch).
+  if (method === "BOLETO") {
+    const missing: string[] = [];
+    if (!payerName?.trim()) missing.push("nome completo");
+    if (!payerCpf) missing.push("CPF");
+    if (!payerAddress?.zipCode || !payerAddress.street || !payerAddress.city || !payerAddress.state) {
+      missing.push("endereço de entrega");
+    }
+    if (missing.length > 0) {
+      throw new Error(
+        `Pagamento com boleto exige ${missing.join(", ")} preenchidos no perfil do cliente.`
+      );
+    }
+  }
 
   if (method === "PIX") {
     mpPaymentMethodId = "pix";
@@ -329,12 +424,12 @@ export async function createMercadoPagoPayment(params: {
     total_amount: total,
     external_reference: orderId,
     description,
-    payer: {
+    payer: buildPayerObject({
       email: payerEmail,
-      identification: payerCpf
-        ? { type: "CPF", number: payerCpf.replace(/\D/g, "") }
-        : undefined,
-    },
+      cpf: payerCpf,
+      name: payerName,
+      address: payerAddress,
+    }),
     transactions: {
       payments: [
         {
@@ -375,7 +470,11 @@ export async function createMercadoPagoPayment(params: {
     externalPaymentId: String(payment?.id ?? data?.id ?? `pay-${orderId.slice(-8)}`),
     mpOrderId: String(data?.id ?? payment?.id ?? `ord-${orderId.slice(-8)}`),
     pixCode: typeof paymentMethod?.qr_code === "string" ? paymentMethod.qr_code : undefined,
-    pixQrCodeBase64: typeof paymentMethod?.qr_code_base64 === "string" ? paymentMethod.qr_code_base64 : undefined,
+    pixQrCodeBase64: normalizeImageDataUri(
+      typeof paymentMethod?.qr_code_base64 === "string"
+        ? paymentMethod.qr_code_base64
+        : undefined
+    ),
     boletoUrl: typeof paymentMethod?.ticket_url === "string" ? paymentMethod.ticket_url : undefined,
     installments: method === "CREDIT_CARD" ? (installments ?? 1) : undefined,
   };
@@ -397,6 +496,16 @@ export async function createMercadoPagoOrder(params: {
   installments: number;
   payerEmail: string;
   payerCpf?: string;
+  payerName?: string;
+  payerAddress?: {
+    zipCode?: string;
+    street?: string;
+    number?: string;
+    complement?: string;
+    district?: string;
+    city?: string;
+    state?: string;
+  };
 }): Promise<{
   gatewayId: string;        // payment ID (PAY...)
   mpOrderId: string;        // order ID (ORD...)
@@ -429,15 +538,12 @@ export async function createMercadoPagoOrder(params: {
         total_amount: total,
         external_reference: params.orderId,
         description: params.description,
-        payer: {
+        payer: buildPayerObject({
           email: params.payerEmail,
-          identification: params.payerCpf
-            ? {
-                type: "CPF",
-                number: params.payerCpf.replace(/\D/g, ""),
-              }
-            : undefined,
-        },
+          cpf: params.payerCpf,
+          name: params.payerName,
+          address: params.payerAddress,
+        }),
         transactions: {
           payments: [
             {
