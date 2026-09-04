@@ -55,6 +55,16 @@ export default function CadastrarForm() {
       />
 
       <input
+        name="cpf"
+        type="text"
+        placeholder="CPF (opcional)"
+        inputMode="numeric"
+        maxLength={14}
+        autoComplete="off"
+        className="w-full rounded-sm border border-base-line bg-base px-3 py-2 text-sm text-ink placeholder:text-ink-soft/40 focus:border-volt focus:outline-none"
+      />
+
+      <input
         name="password"
         type="password"
         placeholder="Senha (mín. 6 caracteres)"

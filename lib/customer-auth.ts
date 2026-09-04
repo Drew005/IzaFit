@@ -56,6 +56,15 @@ export async function customerRegister(
   const password = formData.get("password") as string;
   const next = safeNext(formData.get("next"));
 
+  // CPF opcional no cadastro (pode ser preenchido depois no perfil).
+  let cpf = (formData.get("cpf") as string)?.trim() || null;
+  if (cpf) {
+    cpf = cpf.replace(/\D/g, "");
+    if (cpf.length !== 11) {
+      return { error: "CPF inválido. Informe os 11 dígitos." };
+    }
+  }
+
   if (!name || !email || !password) {
     return { error: "Preencha nome, email e senha." };
   }
@@ -72,6 +81,7 @@ export async function customerRegister(
     data: {
       name,
       email,
+      cpf,
       passwordHash: await hash(password, 10),
       active: true,
     },
@@ -118,12 +128,21 @@ export async function updateProfile(
 
   const name = (formData.get("name") as string)?.trim();
   const phone = (formData.get("phone") as string)?.trim() || null;
+  // CPF (digitado apenas com números) — necessário para o pagamento via
+  // Mercado Pago. Aceitamos também com máscara e normalizamos.
+  let cpf = (formData.get("cpf") as string)?.trim() || null;
+  if (cpf) {
+    cpf = cpf.replace(/\D/g, "");
+    if (cpf.length !== 11) {
+      return { error: "CPF inválido. Informe os 11 dígitos." };
+    }
+  }
 
   if (!name) return { error: "Informe seu nome." };
 
   await prisma.customer.update({
     where: { id: customer.id },
-    data: { name, phone },
+    data: { name, phone, cpf },
   });
 
   return { success: "Perfil atualizado com sucesso." };

@@ -106,6 +106,7 @@ export default async function PerfilPage() {
               name={full?.name ?? ""}
               phone={full?.phone ?? ""}
               email={full?.email ?? ""}
+              cpf={full?.cpf ?? null}
             />
           </div>
         </div>

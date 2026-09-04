@@ -20,10 +20,12 @@ export default function PerfilForm({
   name,
   phone,
   email,
+  cpf,
 }: {
   name: string;
   phone: string;
   email: string;
+  cpf: string | null;
 }) {
   const [state, formAction] = useFormState(updateProfile, null);
 
@@ -70,6 +72,22 @@ export default function PerfilForm({
           disabled
           className="mt-1 w-full cursor-not-allowed rounded-sm border border-base-line bg-base px-3 py-2 text-sm text-ink-soft/50 focus:outline-none"
         />
+      </label>
+
+      <label className="block">
+        <span className="text-xs text-ink-soft">CPF</span>
+        <input
+          name="cpf"
+          type="text"
+          defaultValue={cpf ?? ""}
+          placeholder="000.000.000-00"
+          inputMode="numeric"
+          maxLength={14}
+          className="mt-1 w-full rounded-sm border border-base-line bg-base px-3 py-2 text-sm text-ink placeholder:text-ink-soft/40 focus:border-volt focus:outline-none"
+        />
+        <span className="mt-1 block text-[11px] text-ink-soft/60">
+          Necessário para o pagamento via PIX ou cartão.
+        </span>
       </label>
 
       <SubmitButton />
