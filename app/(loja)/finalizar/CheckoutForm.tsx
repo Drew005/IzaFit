@@ -15,7 +15,7 @@ import {
   Check,
 } from "lucide-react";
 import { useCart } from "@/components/store/CartProvider";
-import { checkout } from "@/lib/checkout";
+import { validateCoupon } from "@/lib/actions/coupon";
 import { currency } from "@/lib/format";
 
 type Address = {
@@ -95,7 +95,38 @@ export default function CheckoutForm({
   addresses: Address[];
 }) {
   const { items, subtotal, clear } = useCart();
-  const [state, formAction] = useFormState(checkout, null);
+  const [couponCode, setCouponCode] = useState("");
+  const [couponResult, setCouponResult] = useState<{
+    discount: number;
+    newTotal: number;
+    message: string;
+  } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!couponCode) {
+      setCouponResult(null);
+      setCouponError(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const result = await validateCoupon(couponCode, subtotal);
+        if ("error" in result) {
+          setCouponError(result.error);
+          setCouponResult(null);
+        } else {
+          setCouponResult(result);
+          setCouponError(null);
+        }
+      } catch (e) {
+        setCouponError("Erro ao validar cupom.");
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [couponCode, subtotal]);
 
   const defaultAddressId =
     addresses.find((a) => a.isDefault)?.id ?? addresses[0]?.id ?? "";
