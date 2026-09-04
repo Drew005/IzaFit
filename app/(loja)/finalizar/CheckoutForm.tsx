@@ -18,6 +18,7 @@ import { useCart } from "@/components/store/CartProvider";
 import { checkout } from "@/lib/checkout";
 import { validateCoupon } from "@/lib/actions/coupon";
 import { currency } from "@/lib/format";
+import CardPaymentBrick from "@/components/store/CardPaymentBrick";
 
 type Address = {
   id: string;
@@ -90,9 +91,11 @@ function formatCep(cep: string) {
 
 export default function CheckoutForm({
   customerName,
+  mpPublicKey,
   addresses,
 }: {
   customerName: string;
+  mpPublicKey: string;
   addresses: Address[];
 }) {
   const { items, subtotal, clear } = useCart();
@@ -106,6 +109,12 @@ export default function CheckoutForm({
   } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
+
+  // Valor total a cobrar (já com desconto do cupom, se houver) — usado no Brick.
+  const totalAmount =
+    couponResult && couponResult.newTotal > 0
+      ? Math.round(couponResult.newTotal * 100)
+      : Math.round(subtotal * 100);
 
   const applyCoupon = async () => {
     const code = couponCode.trim();
@@ -155,6 +164,27 @@ export default function CheckoutForm({
   const defaultAddressId =
     addresses.find((a) => a.isDefault)?.id ?? addresses[0]?.id ?? "";
 
+  // Estado do processamento do cartão (Card Payment Brick)
+  const [cardResult, setCardResult] = useState<{
+    ok: boolean;
+    simulated?: boolean;
+    message?: string;
+  } | null>(null);
+  const [cardError, setCardError] = useState<string | null>(null);
+
+  const handleCardProcessed = (result: {
+    ok: boolean;
+    simulated?: boolean;
+    message?: string;
+  }) => {
+    setCardResult(result);
+    setCardError(null);
+  };
+
+  const handleCardError = (message: string) => {
+    setCardError(message);
+  };
+
   // Após pedido confirmado, limpa o carrinho local.
   useEffect(() => {
     if (state?.success) clear();
@@ -171,9 +201,11 @@ export default function CheckoutForm({
               Pedido #{state.orderId?.slice(-6)} criado!
             </h2>
             <p className="mt-2 text-sm text-ink-soft">
-              {state.payment?.simulated
-                ? "Pagamento em modo de demonstração — finalize para concluir a compra."
-                : "Seu pagamento foi gerado. Conclua o pagamento abaixo para confirmar o pedido."}
+              {state.requiresCardProcessing
+                ? "Informe os dados do cartão abaixo para concluir o pagamento."
+                : state.payment?.simulated
+                  ? "Pagamento em modo de demonstração — finalize para concluir a compra."
+                  : "Seu pagamento foi gerado. Conclua o pagamento abaixo para confirmar o pedido."}
             </p>
 
             {/* Detalhes do Pagamento */}
@@ -217,6 +249,40 @@ export default function CheckoutForm({
               
               {state.payment?.method === "CREDIT_CARD" && (
                 <p className="mt-4 text-sm text-ink-soft">Pagamento via cartão de crédito processado.</p>
+              )}
+
+              {/* Fluxo do cartão: aguarda o Card Payment Brick processar */}
+              {state.requiresCardProcessing && state.orderId && (
+                <div className="mt-4 text-left">
+                  {cardResult?.ok ? (
+                    <div className="rounded-sm border border-volt/40 bg-volt/10 p-4">
+                      <p className="flex items-center justify-center gap-2 font-medium text-ink">
+                        <CheckCircle2 size={18} className="text-volt" />
+                        {cardResult.simulated
+                          ? "Pagamento simulado (modo demonstração)."
+                          : cardResult.message ?? "Pagamento aprovado!"}
+                      </p>
+                      {cardResult.simulated && (
+                        <p className="mt-1 text-center text-xs text-ink-soft">
+                          Nenhum valor foi cobrado.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <CardPaymentBrick
+                      amount={totalAmount}
+                      orderId={state.orderId}
+                      publicKey={mpPublicKey}
+                      onProcessed={handleCardProcessed}
+                      onError={handleCardError}
+                    />
+                  )}
+                  {cardError && (
+                    <p className="mt-3 rounded-sm border border-alert/40 bg-alert/10 px-3 py-2 text-sm text-alert">
+                      {cardError}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 

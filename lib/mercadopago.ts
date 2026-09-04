@@ -74,6 +74,12 @@ export interface CheckoutPaymentResult {
 // ---------------------------------------------------------------------------
 
 const ACCESS_TOKEN = process.env.MERCADO_PAGO_ACCESS_TOKEN ?? "";
+// A chave pública pode estar com ou sem o prefixo NEXT_PUBLIC_. Aceita os dois
+// nomes para ser robusto à convenção usada no deploy (Vercel/etc).
+const PUBLIC_KEY =
+  process.env.NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY ??
+  process.env.MERCADO_PAGO_PUBLIC_KEY ??
+  "";
 const WEBHOOK_SECRET = process.env.MERCADO_PAGO_WEBHOOK_SECRET ?? "";
 
 /**
@@ -82,6 +88,22 @@ const WEBHOOK_SECRET = process.env.MERCADO_PAGO_WEBHOOK_SECRET ?? "";
  */
 export function isMercadoPagoConfigured(): boolean {
   return ACCESS_TOKEN.length > 0;
+}
+
+/**
+ * Retorna a chave pública (usada no front-end pelo Card Payment Brick).
+ * Pode ser vazia — o front-end deve tratar a ausência dela com simulação.
+ */
+export function getMercadoPagoPublicKey(): string {
+  return PUBLIC_KEY;
+}
+
+/**
+ * Retorna true se o card payment (Orders API + Brick) está totalmente
+ * configurado: precisa da ACCESS_TOKEN (backend) e da PUBLIC_KEY (frontend).
+ */
+export function isCardPaymentConfigured(): boolean {
+  return ACCESS_TOKEN.length > 0 && PUBLIC_KEY.length > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +196,116 @@ export async function createMercadoPagoPayment(params: {
     // Erro de rede/parse: nunca derruba o checkout.
     console.error("[MercadoPago] Exceção ao criar pagamento:", error);
     return createSimulatedPayment(amount, method, orderId, installments);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Orders API (cartão de crédito — Card Payment Brick)
+// ---------------------------------------------------------------------------
+
+/**
+ * Cria uma Order no Mercado Pago via Orders API para pagamento com cartão.
+ * Usada quando o front-end envia o token do card gerado pelo Brick.
+ *
+ * @returns Dados normalizados da transação criada.
+ */
+export async function createMercadoPagoOrder(params: {
+  amount: number; // centavos
+  description: string;
+  orderId: string; // external_reference
+  cardToken: string;
+  paymentMethodId: string; // ex.: "visa", "master"
+  paymentTypeId: string; // "credit_card" | "debit_card"
+  installments: number;
+  payerEmail: string;
+  payerCpf?: string;
+}): Promise<{
+  gatewayId: string;
+  status: string;
+  statusDetail?: string;
+  simulated: boolean;
+}> {
+  if (!isMercadoPagoConfigured()) {
+    return {
+      gatewayId: `sim-order-${params.orderId.slice(-8)}`,
+      status: "processed",
+      statusDetail: "accredited",
+      simulated: true,
+    };
+  }
+
+  const total = (params.amount / 100).toFixed(2);
+  const body = {
+    type: "online",
+    processing_mode: "automatic",
+    total_amount: total,
+    external_reference: params.orderId,
+    description: params.description,
+    payer: {
+      email: params.payerEmail,
+      identification: params.payerCpf
+        ? {
+            type: "CPF",
+            number: params.payerCpf.replace(/\D/g, ""),
+          }
+        : undefined,
+    },
+    transactions: {
+      payments: [
+        {
+          amount: total,
+          payment_method: {
+            id: params.paymentMethodId,
+            type: params.paymentTypeId,
+            token: params.cardToken,
+            installments: params.installments,
+          },
+        },
+      ],
+    },
+  };
+
+  const idempotencyKey = `order-${params.orderId}-${Date.now()}`;
+
+  try {
+    const response = await fetch("https://api.mercadopago.com/v1/orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${ACCESS_TOKEN}`,
+        "X-Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error("[MercadoPago] Erro ao criar order (cartão):", response.status, err);
+      return {
+        gatewayId: `sim-order-${params.orderId.slice(-8)}`,
+        status: "processed",
+        statusDetail: "simulated",
+        simulated: true,
+      };
+    }
+
+    const data = await response.json();
+    const payment = data?.transactions?.payments?.[0];
+
+    return {
+      gatewayId: String(data?.id ?? payment?.id ?? `order-${params.orderId.slice(-8)}`),
+      status: payment?.status ?? data?.status ?? "pending",
+      statusDetail: payment?.status_detail ?? data?.status_detail,
+      simulated: false,
+    };
+  } catch (error) {
+    console.error("[MercadoPago] Exceção ao criar order (cartão):", error);
+    return {
+      gatewayId: `sim-order-${params.orderId.slice(-8)}`,
+      status: "processed",
+      statusDetail: "simulated",
+      simulated: true,
+    };
   }
 }
 

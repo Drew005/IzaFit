@@ -2,6 +2,7 @@ import Link from "next/link";
 import { User, ShoppingBag } from "lucide-react";
 import { getCurrentCustomer } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
+import { getMercadoPagoPublicKey } from "@/lib/mercadopago";
 import CheckoutForm from "./CheckoutForm";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +69,7 @@ export default async function FinalizarPage() {
 
       <CheckoutForm
         customerName={customer.name}
+        mpPublicKey={getMercadoPagoPublicKey()}
         addresses={addresses.map((a) => ({
           id: a.id,
           label: a.label,

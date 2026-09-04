@@ -16,6 +16,8 @@ type CheckoutState = {
   success?: string;
   orderId?: string;
   payment?: CheckoutPaymentResult;
+  /** true quando o pagamento é por cartão e precisa ser processado no front-end */
+  requiresCardProcessing?: boolean;
 } | null;
 
 export async function checkout(
@@ -163,6 +165,19 @@ export async function checkout(
       : paymentMethod === PaymentMethod.BOLETO
         ? "BOLETO"
         : "PIX";
+
+  // CARTAO: o pagamento real é processado no front-end (Card Payment Brick)
+  // via /api/orders/process, porque o token do cartão só existe lá. Aqui
+  // apenas criamos o pedido e o pagamento como PENDING e devolvemos o orderId
+  // para o CheckoutForm renderizar o Brick.
+  if (mpMethod === "CREDIT_CARD") {
+    revalidatePath("/perfil");
+    return {
+      success: "Pedido criado. Finalize o cartão para confirmar.",
+      orderId: order.id,
+      requiresCardProcessing: true,
+    };
+  }
 
   const payResult = await createMercadoPagoPayment({
     amount: Math.round(Number(order.total) * 100),
