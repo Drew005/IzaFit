@@ -185,15 +185,33 @@ export async function checkout(
     };
   }
 
-  const payResult = await createMercadoPagoPayment({
-    amount: Math.round(Number(order.total) * 100),
-    description: `IzaFit — Pedido #${order.id.slice(-6).toUpperCase()}`,
-    method: mpMethod,
-    payerEmail: customer.email || "",
-    payerCpf: customer.cpf || undefined,
-    orderId: order.id,
-    installments: 1,
-  });
+  let payResult;
+  try {
+    payResult = await createMercadoPagoPayment({
+      amount: Math.round(Number(order.total) * 100),
+      description: `IzaFit — Pedido #${order.id.slice(-6).toUpperCase()}`,
+      method: mpMethod,
+      payerEmail: customer.email || "",
+      payerCpf: customer.cpf || undefined,
+      orderId: order.id,
+      installments: 1,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro desconhecido ao gerar pagamento.";
+    console.error("[Checkout] Erro ao gerar pagamento:", msg);
+    // Cancela o pedido para não ficar como PENDING órfão.
+    await prisma.$transaction(async (tx) => {
+      await tx.payment.updateMany({
+        where: { orderId: order.id },
+        data: { gatewayMeta: { error: msg }, status: "DENIED" },
+      });
+      await tx.order.update({
+        where: { id: order.id },
+        data: { status: "CANCELED" },
+      });
+    });
+    return { error: msg };
+  }
 
   // Grava o ID externo do gateway no pagamento para casar com o webhook.
   await prisma.payment.updateMany({
@@ -204,6 +222,7 @@ export async function checkout(
         pixCode: payResult.pixCode ?? null,
         pixQrCodeBase64: payResult.pixQrCodeBase64 ?? null,
         boletoUrl: payResult.boletoUrl ?? null,
+        mpOrderId: payResult.mpOrderId,
       },
     },
   });

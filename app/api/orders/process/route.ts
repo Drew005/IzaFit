@@ -69,17 +69,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const mpResult = await createMercadoPagoOrder({
-    amount: Math.round(Number(order.total) * 100),
-    description: `IzaFit — Pedido #${order.id.slice(-6).toUpperCase()}`,
-    orderId: order.id,
-    cardToken,
-    paymentMethodId,
-    paymentTypeId,
-    installments: Math.max(1, installments),
-    payerEmail: customer.email || "",
-    payerCpf: customer.cpf || undefined,
-  });
+  let mpResult;
+  try {
+    mpResult = await createMercadoPagoOrder({
+      amount: Math.round(Number(order.total) * 100),
+      description: `IzaFit — Pedido #${order.id.slice(-6).toUpperCase()}`,
+      orderId: order.id,
+      cardToken,
+      paymentMethodId,
+      paymentTypeId,
+      installments: Math.max(1, installments),
+      payerEmail: customer.email || "",
+      payerCpf: customer.cpf || undefined,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro desconhecido ao processar pagamento.";
+    return NextResponse.json({ error: msg }, { status: 502 });
+  }
 
   // Status da order do MP → status interno.
   // "processed"/"approved" → APPROVED/PAID; senão mantém PENDING.
@@ -97,6 +103,7 @@ export async function POST(request: NextRequest) {
         gatewayId: mpResult.gatewayId,
         gatewayMeta: {
           statusDetail: mpResult.statusDetail ?? null,
+          mpOrderId: mpResult.mpOrderId,
           card: {
             paymentMethodId,
             installments: Math.max(1, installments),

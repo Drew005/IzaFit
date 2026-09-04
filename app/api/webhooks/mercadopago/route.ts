@@ -1,142 +1,205 @@
 // =============================================================================
-// WEBHOOK — Mercado Pago
+// WEBHOOK — Mercado Pago Orders API
 // =============================================================================
-// O Mercado Pago envia notificações de mudança de status de pagamento para
-// esta rota. O endpoint SEMPRE retorna 200 OK (mesmo em caso de erro) para
-// evitar retentativas infinitas.
+// O Mercado Pago envia notificações de criação/alteração de Orders para esta
+// rota. A rota consulta a Order diretamente na API antes de alterar o pedido
+// interno, sem confiar no status enviado pelo webhook.
 // =============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
-  validateWebhookSignature,
+  getMercadoPagoOrderStatus,
   getMercadoPagoPayment,
+  validateWebhookSignature,
 } from "@/lib/mercadopago";
 import { StockMovementType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
-// Mapeamento dos status do Mercado Pago para o nosso sistema.
-const STATUS_MAP: Record<string, string> = {
+export const dynamic = "force-dynamic";
+
+const ORDER_STATUS_MAP: Record<string, "PENDING" | "PAID" | "CANCELED" | "REFUNDED"> = {
+  processed: "PAID",
   approved: "PAID",
   authorized: "PAID",
   pending: "PENDING",
+  action_required: "PENDING",
   in_process: "PENDING",
   inmediatelly: "PENDING",
   cancelled: "CANCELED",
+  canceled: "CANCELED",
   denied: "CANCELED",
+  rejected: "CANCELED",
+  failed: "CANCELED",
+  expired: "CANCELED",
   refunded: "REFUNDED",
   charged_back: "REFUNDED",
 };
 
-const PAYMENT_STATUS_MAP: Record<string, string> = {
+const PAYMENT_STATUS_MAP: Record<string, "PENDING" | "APPROVED" | "DENIED" | "REFUNDED"> = {
+  processed: "APPROVED",
   approved: "APPROVED",
   authorized: "APPROVED",
   pending: "PENDING",
+  action_required: "PENDING",
   in_process: "PENDING",
+  inmediatelly: "PENDING",
   cancelled: "DENIED",
+  canceled: "DENIED",
   denied: "DENIED",
+  rejected: "DENIED",
+  failed: "DENIED",
+  expired: "DENIED",
   refunded: "REFUNDED",
   charged_back: "REFUNDED",
 };
+
+type MercadoPagoWebhookPayload = {
+  action?: string;
+  type?: string;
+  data?: {
+    id?: string;
+    order_id?: string;
+    external_reference?: string;
+  };
+};
+
+type GatewayMeta = {
+  mpOrderId?: unknown;
+};
+
+function getMetaOrderId(value: unknown): string | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const meta = value as GatewayMeta;
+  return typeof meta.mpOrderId === "string" ? meta.mpOrderId : undefined;
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text();
     const signature = request.headers.get("x-signature");
+    const requestId = request.headers.get("x-request-id");
 
-    // Validação de assinatura (se configurada)
-    if (!validateWebhookSignature(body, signature)) {
+    let payload: MercadoPagoWebhookPayload;
+    try {
+      payload = JSON.parse(body) as MercadoPagoWebhookPayload;
+    } catch {
+      return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
+    }
+
+    // A documentação do Mercado Pago envia data.id também na query string.
+    // O fallback para o body permite testar manualmente e tolera variações do payload.
+    const dataId =
+      request.nextUrl.searchParams.get("data.id") ?? payload.data?.id ?? null;
+
+    if (!validateWebhookSignature(body, signature, requestId, dataId)) {
       console.error("[Webhook MP] Assinatura inválida");
-      return NextResponse.json({ ok: true }); // 200 mesmo com erro
+      return NextResponse.json({ error: "Assinatura inválida." }, { status: 401 });
     }
 
-    const payload = JSON.parse(body);
-    const action = payload.action as string | undefined;
-    const paymentId = payload.data?.id;
+    const mpId = payload.data?.id;
+    if (!mpId) return NextResponse.json({ ok: true });
 
-    // Apenas processamos notificações de pagamento
-    if (action !== "payment.created" && action !== "payment.updated") {
-      return NextResponse.json({ ok: true });
-    }
+    const isOrderNotification = payload.type === "order" || mpId.startsWith("ORD");
+    const isPaymentNotification = payload.type === "payment" || !isOrderNotification;
 
-    if (!paymentId) {
-      return NextResponse.json({ ok: true });
-    }
-
-    // Busca os dados atualizados do pagamento
-    const mpPayment = await getMercadoPagoPayment(paymentId);
-    if (!mpPayment) {
-      return NextResponse.json({ ok: true });
-    }
-
-    // Localiza o pagamento interno pelo gatewayId (campo mais confiável).
-    const internalPayment = await prisma.payment.findUnique({
-      where: { gatewayId: String(paymentId) },
-      select: { orderId: true },
+    // Localiza o pagamento interno pelo payment ID ou pela order ID do Mercado Pago.
+    // O gatewayId novo guarda PAY..., enquanto mpOrderId fica em gatewayMeta.
+    let internalPayment = await prisma.payment.findFirst({
+      where: { gatewayId: mpId },
+      select: { id: true, orderId: true, gatewayMeta: true },
     });
 
-    // Fallback: usa o external_reference (orderId) quando o gatewayId não confere.
+    if (!internalPayment && isOrderNotification) {
+      internalPayment = await prisma.payment.findFirst({
+        where: {
+          gatewayMeta: {
+            path: ["mpOrderId"],
+            equals: mpId,
+          },
+        },
+        select: { id: true, orderId: true, gatewayMeta: true },
+      });
+    }
+
+    // Para notificações de payment, o payload pode trazer order_id; ele também
+    // permite achar o registro mesmo que a notificação chegue antes do update local.
+    const mpOrderId =
+      (isOrderNotification ? mpId : payload.data?.order_id) ??
+      getMetaOrderId(internalPayment?.gatewayMeta);
+
+    if (!internalPayment && mpOrderId) {
+      internalPayment = await prisma.payment.findFirst({
+        where: {
+          gatewayMeta: {
+            path: ["mpOrderId"],
+            equals: mpOrderId,
+          },
+        },
+        select: { id: true, orderId: true, gatewayMeta: true },
+      });
+    }
+
     const resolvedOrderId =
-      internalPayment?.orderId ??
-      (payload.data?.external_reference as string | undefined) ??
-      "";
+      internalPayment?.orderId ?? payload.data?.external_reference ?? "";
+
+    if (!resolvedOrderId) return NextResponse.json({ ok: true });
 
     const order = await prisma.order.findUnique({
       where: { id: resolvedOrderId },
       include: { payments: true, items: true },
     });
 
-    if (!order) {
-      return NextResponse.json({ ok: true });
-    }
+    if (!order) return NextResponse.json({ ok: true });
 
-    const orderId = order.id;
+    // Orders API: consulta sempre /v1/orders/{ORD...}. Payment API antigo:
+    // mantém compatibilidade somente quando a notificação não é de uma Order.
+    const mpResult = mpOrderId
+      ? await getMercadoPagoOrderStatus(mpOrderId)
+      : isPaymentNotification
+        ? await getMercadoPagoPayment(mpId)
+        : null;
 
-    const newOrderStatus = STATUS_MAP[mpPayment.status] as
-      | "PENDING"
-      | "PAID"
-      | "CANCELED"
-      | "REFUNDED"
-      | undefined;
-    const newPaymentStatus = PAYMENT_STATUS_MAP[mpPayment.status] as
-      | "PENDING"
-      | "APPROVED"
-      | "DENIED"
-      | "REFUNDED"
-      | undefined;
+    if (!mpResult) return NextResponse.json({ ok: true });
+
+    const normalizedStatus = mpResult.status.toLowerCase();
+    const newOrderStatus = ORDER_STATUS_MAP[normalizedStatus];
+    const newPaymentStatus = PAYMENT_STATUS_MAP[normalizedStatus];
 
     if (!newOrderStatus || !newPaymentStatus) {
+      console.warn("[Webhook MP] Status não mapeado:", mpResult.status);
       return NextResponse.json({ ok: true });
     }
 
-    // Transação para atualizar pedido + pagamento
+    const wasPaid = ["PAID", "SHIPPED", "COMPLETED"].includes(order.status);
+    const shouldApplyPaidEffects = newOrderStatus === "PAID" && !wasPaid;
+    const shouldRestorePaidEffects = wasPaid && ["CANCELED", "REFUNDED"].includes(newOrderStatus);
+
     await prisma.$transaction(async (tx) => {
-      // Atualiza status do pedido
       await tx.order.update({
-        where: { id: orderId },
+        where: { id: order.id },
         data: { status: newOrderStatus },
       });
 
-      // Atualiza status do pagamento
       const payment = order.payments[0];
       if (payment) {
         await tx.payment.update({
           where: { id: payment.id },
           data: {
+            gatewayId: mpResult.paymentId ?? payment.gatewayId ?? mpId,
             status: newPaymentStatus,
             paidAt: newPaymentStatus === "APPROVED" ? new Date() : null,
           },
         });
       }
 
-      // Se aprovado: baixar estoque e dar pontos de fidelidade
-      if (newOrderStatus === "PAID") {
+      // A notificação pode ser reenviada várias vezes. Só baixa o estoque na
+      // transição para pago, evitando duplicidade.
+      if (shouldApplyPaidEffects) {
         for (const item of order.items) {
           await tx.productVariant.update({
             where: { id: item.variantId },
-            data: {
-              stockQuantity: { decrement: item.quantity },
-            },
+            data: { stockQuantity: { decrement: item.quantity } },
           });
 
           await tx.stockMovement.create({
@@ -144,24 +207,22 @@ export async function POST(request: NextRequest) {
               variantId: item.variantId,
               type: StockMovementType.SALE_OUT,
               quantity: item.quantity,
-              reason: `Venda online (pedido ${orderId.slice(-6)})`,
-              referenceId: orderId,
+              reason: `Venda online (pedido ${order.id.slice(-6)})`,
+              referenceId: order.id,
             },
           });
         }
 
-        // Brindes — debita estoque
         const orderGifts = await tx.orderGift.findMany({
-          where: { orderId },
+          where: { orderId: order.id },
         });
-        for (const og of orderGifts) {
+        for (const gift of orderGifts) {
           await tx.gift.updateMany({
-            where: { id: og.giftId, stockQuantity: { gt: 0 } },
-            data: { stockQuantity: { decrement: og.quantity } },
+            where: { id: gift.giftId, stockQuantity: { gt: 0 } },
+            data: { stockQuantity: { decrement: gift.quantity } },
           });
         }
 
-        // Pontos de fidelidade (1 ponto a cada R$ 10)
         if (order.customerId) {
           const earnedPoints = Math.floor(Number(order.total) / 10);
           if (earnedPoints > 0) {
@@ -173,17 +234,13 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Se cancelado/devolvido: restaurar estoque (se estava pago antes)
-      const wasPaid = ["PAID", "SHIPPED", "COMPLETED"].includes(order.status);
-      const nowCanceled = ["CANCELED", "REFUNDED"].includes(newOrderStatus);
-
-      if (wasPaid && nowCanceled) {
+      // Se uma compra já paga for cancelada/reembolsada, restaura estoque e pontos
+      // uma única vez. Estados já cancelados não entram nessa transição.
+      if (shouldRestorePaidEffects) {
         for (const item of order.items) {
           await tx.productVariant.update({
             where: { id: item.variantId },
-            data: {
-              stockQuantity: { increment: item.quantity },
-            },
+            data: { stockQuantity: { increment: item.quantity } },
           });
 
           await tx.stockMovement.create({
@@ -191,24 +248,22 @@ export async function POST(request: NextRequest) {
               variantId: item.variantId,
               type: StockMovementType.RETURN_IN,
               quantity: item.quantity,
-              reason: `Cancelamento via webhook Mercado Pago (pedido ${orderId.slice(-6)})`,
-              referenceId: orderId,
+              reason: `Cancelamento via webhook Mercado Pago (pedido ${order.id.slice(-6)})`,
+              referenceId: order.id,
             },
           });
         }
 
-        // Restaurar brindes
         const orderGifts = await tx.orderGift.findMany({
-          where: { orderId },
+          where: { orderId: order.id },
         });
-        for (const og of orderGifts) {
+        for (const gift of orderGifts) {
           await tx.gift.update({
-            where: { id: og.giftId },
-            data: { stockQuantity: { increment: og.quantity } },
+            where: { id: gift.giftId },
+            data: { stockQuantity: { increment: gift.quantity } },
           });
         }
 
-        // Remover pontos de fidelidade
         if (order.customerId) {
           const earnedPoints = Math.floor(Number(order.total) / 10);
           if (earnedPoints > 0) {
@@ -221,7 +276,6 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Revalidar caches
     revalidatePath("/admin/vendas");
     revalidatePath("/admin/financeiro");
     revalidatePath("/admin/estoque");
@@ -230,7 +284,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    // Log do erro mas SEMPRE retorna 200 para o Mercado Pago não reenviar
+    // Retornar 200 evita tempestade de retries quando o problema for interno;
+    // o erro permanece registrado para diagnóstico no Vercel.
     console.error("[Webhook MP] Erro ao processar notificação:", error);
     return NextResponse.json({ ok: true });
   }

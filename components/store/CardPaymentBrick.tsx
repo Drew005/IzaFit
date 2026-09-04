@@ -160,8 +160,7 @@ export default function CardPaymentBrick({
   if (!publicKey) {
     return (
       <div className="rounded-sm border border-base-line bg-base p-4 text-sm text-ink-soft">
-        Pagamento com cartão em modo de demonstração (chave pública não
-        configurada). Nenhum valor será cobrado.
+        Pagamento com cartão indisponível no momento. Use PIX ou boleto.
       </div>
     );
   }
