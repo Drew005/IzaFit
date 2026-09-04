@@ -98,7 +98,7 @@ export default function CardPaymentBrick({
               formData: {
                 token: string;
                 payment_method_id: string;
-                payment_type_id?: string;
+                payment_method_type?: string;
                 installments: number;
                 payer: {
                   email: string;
@@ -117,7 +117,7 @@ export default function CardPaymentBrick({
                     cardToken: formData.token,
                     paymentMethodId: formData.payment_method_id,
                     paymentTypeId:
-                      formData.payment_type_id ?? "credit_card",
+                      formData.payment_method_type ?? "credit_card",
                     installments: formData.installments,
                   }),
                 });

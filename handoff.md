@@ -36,6 +36,8 @@ Implementar o pagamento com **cartão de crédito** do Mercado Pago Checkout Tra
   - Cleanup: `unmount()` no unmount
 
 - **`lib/checkout.ts`**: para `CREDIT_CARD`, NÃO chama mais `createMercadoPagoPayment`. Apenas cria pedido+payment PENDING e retorna `{ orderId, requiresCardProcessing: true }`.
+  - Se **não** houver credenciais de cartão (sem Brick), conclui em **modo demonstração** (pedido + `payment` simulado) para nunca travar em PENDING.
+  - Retorna `orderTotal` (centavos) para o Brick usar após o carrinho ser limpo.
 
 - **`app/(loja)/finalizar/page.tsx`** (server) lê a chave pública e passa como prop (robusto a nome: `NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY` ou `MERCADO_PAGO_PUBLIC_KEY`).
 
@@ -97,10 +99,11 @@ MERCADO_PAGO_WEBHOOK_SECRET=            # opcional
 
 ---
 
-## Notes / Pitfalls
+## Notas / Pitfalls
 1. **401 "Unauthorized use of live credentials"**: se o ACCESS_TOKEN e a PUBLIC_KEY forem de ambientes diferentes (teste vs produção), a criação falha. O código cai em simulação em vez de quebrar. Revisar que ambos são do mesmo ambiente.
 2. O `total_amount` da Orders API é **string** `"00.00"`, não número.
-3. `payment_method_id` do Brick é a **bandeira** (`visa`, `master`...), não `"credit_card"`. O `payment_type_id` é `"credit_card"`/`"debit_card"`.
-4. `processing_mode: "automatic"` cria+processa em 1 etapa.
-5. Supabase: `prisma db push` sem migrations. Cuidado ao editar schema.
-6. `tsc --noEmit` é a fonte de verdade para tipos (diagnostics do LSP podem estar desatualizados).
+3. `payment_method_id` do Brick é a **bandeira** (`visa`, `master`...), não `"credit_card"`. O tipo vem de `formData.payment_method_type` (campo correto do SDK v2).
+4. O Brick usa `state.orderTotal` (vindo do checkout) para o valor — NÃO o `subtotal` do carrinho, que zera após o pedido ser confirmado.
+5. `processing_mode: "automatic"` cria+processa em 1 etapa.
+6. Supabase: `prisma db push` sem migrations. Cuidado ao editar schema.
+7. `tsc --noEmit` é a fonte de verdade para tipos (diagnostics do LSP podem estar desatualizados).

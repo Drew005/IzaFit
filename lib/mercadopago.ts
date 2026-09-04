@@ -359,7 +359,12 @@ export function validateWebhookSignature(
 // Pagamento simulado (fallback quando não há credenciais)
 // ---------------------------------------------------------------------------
 
-function createSimulatedPayment(
+/**
+ * Gera dados de pagamento simulados para o checkout.
+ * Exportado para que o checkout possa concluir o fluxo do cartão em modo
+ * demonstração sem depender do Brick (que exige chave pública configurada).
+ */
+export function createSimulatedPayment(
   amount: number,
   method: "PIX" | "CREDIT_CARD" | "BOLETO",
   orderId: string,

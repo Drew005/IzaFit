@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentCustomer } from "@/lib/customer-auth";
 import { findEligibleGifts } from "@/lib/gift-eligibility";
-import { createMercadoPagoPayment, type CheckoutPaymentResult } from "@/lib/mercadopago";
+import { createMercadoPagoPayment, createSimulatedPayment, isCardPaymentConfigured, type CheckoutPaymentResult } from "@/lib/mercadopago";
 import { CouponType, PaymentMethod } from "@prisma/client";
 
 /**
@@ -18,6 +18,8 @@ type CheckoutState = {
   payment?: CheckoutPaymentResult;
   /** true quando o pagamento é por cartão e precisa ser processado no front-end */
   requiresCardProcessing?: boolean;
+  /** total do pedido em centavos (usado pelo Brick quando o carrinho já foi limpo) */
+  orderTotal?: number;
 } | null;
 
 export async function checkout(
@@ -170,12 +172,36 @@ export async function checkout(
   // via /api/orders/process, porque o token do cartão só existe lá. Aqui
   // apenas criamos o pedido e o pagamento como PENDING e devolvemos o orderId
   // para o CheckoutForm renderizar o Brick.
-  if (mpMethod === "CREDIT_CARD") {
+  if (mpMethod === "CREDIT_CARD" && isCardPaymentConfigured()) {
     revalidatePath("/perfil");
     return {
       success: "Pedido criado. Finalize o cartão para confirmar.",
       orderId: order.id,
       requiresCardProcessing: true,
+      orderTotal: Math.round(Number(order.total) * 100),
+    };
+  }
+
+  // CARTAO sem credenciais completas (sem Brick disponível): conclui o fluxo
+  // em modo demonstração para o checkout nunca ficar travado em PENDING.
+  if (mpMethod === "CREDIT_CARD") {
+    const simResult = createSimulatedPayment(
+      Math.round(Number(order.total) * 100),
+      "CREDIT_CARD",
+      order.id
+    );
+    await prisma.payment.updateMany({
+      where: { orderId: order.id },
+      data: {
+        gatewayId: simResult.externalPaymentId,
+        gatewayMeta: { simulated: true },
+      },
+    });
+    revalidatePath("/perfil");
+    return {
+      success: "Pedido realizado com sucesso!",
+      orderId: order.id,
+      payment: simResult,
     };
   }
 

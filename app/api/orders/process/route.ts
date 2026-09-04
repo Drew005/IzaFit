@@ -103,6 +103,7 @@ export async function POST(request: NextRequest) {
             installments: Math.max(1, installments),
           },
         },
+        installments: Math.max(1, installments),
         status: newPaymentStatus,
         paidAt: approved ? new Date() : null,
       },

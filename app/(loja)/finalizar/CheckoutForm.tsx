@@ -270,7 +270,7 @@ export default function CheckoutForm({
                     </div>
                   ) : (
                     <CardPaymentBrick
-                      amount={totalAmount}
+                      amount={state.orderTotal ?? totalAmount}
                       orderId={state.orderId}
                       publicKey={mpPublicKey}
                       onProcessed={handleCardProcessed}
