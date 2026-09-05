@@ -91,10 +91,12 @@ function formatCep(cep: string) {
 
 export default function CheckoutForm({
   customerName,
+  customerCpf,
   mpPublicKey,
   addresses,
 }: {
   customerName: string;
+  customerCpf: string | null;
   mpPublicKey: string;
   addresses: Address[];
 }) {
@@ -439,6 +441,12 @@ export default function CheckoutForm({
             {/* Nova Seleção de Pagamento */}
             <div className="space-y-4">
               <span className="text-sm font-medium text-ink">Escolha como pagar</span>
+              {!customerCpf && (
+                <p className="mt-1 rounded-sm border border-dashed border-base-line bg-base px-3 py-2 text-xs text-ink-soft">
+                  Para pagar com boleto, preencha seu CPF em{' '}
+                  <Link href="/perfil" className="text-volt underline">/perfil</Link>.
+                </p>
+              )}
               <div className="grid gap-3 sm:grid-cols-3">
                 {Object.entries(PAYMENT_LABELS).map(([value, label]) => (
                   <label

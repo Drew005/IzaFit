@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { signToken, verifyToken } from "@/lib/jwt";
+import { isValidCpf } from "@/lib/validators";
 
 type AuthState = { error?: string; success?: string } | null;
 
@@ -60,8 +61,8 @@ export async function customerRegister(
   let cpf = (formData.get("cpf") as string)?.trim() || null;
   if (cpf) {
     cpf = cpf.replace(/\D/g, "");
-    if (cpf.length !== 11) {
-      return { error: "CPF inválido. Informe os 11 dígitos." };
+    if (!isValidCpf(cpf)) {
+      return { error: "CPF inválido. Confira os números digitados." };
     }
   }
 
@@ -133,8 +134,8 @@ export async function updateProfile(
   let cpf = (formData.get("cpf") as string)?.trim() || null;
   if (cpf) {
     cpf = cpf.replace(/\D/g, "");
-    if (cpf.length !== 11) {
-      return { error: "CPF inválido. Informe os 11 dígitos." };
+    if (!isValidCpf(cpf)) {
+      return { error: "CPF inválido. Confira os números digitados." };
     }
   }
 

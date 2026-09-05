@@ -6,6 +6,7 @@ import { getCurrentCustomer } from "@/lib/customer-auth";
 import { findEligibleGifts } from "@/lib/gift-eligibility";
 import { createMercadoPagoPayment, isCardPaymentConfigured, type CheckoutPaymentResult } from "@/lib/mercadopago";
 import { CouponType, PaymentMethod } from "@prisma/client";
+import { isValidCpf } from "@/lib/validators";
 
 /**
  * Estado retornado pelo checkout. Pode conter dados de pagamento
@@ -189,10 +190,17 @@ export async function checkout(
   try {
     // Boleto exige nome completo e CPF do cliente na Orders API — falha cedo
     // com mensagem amigável (o catch abaixo cancela o pedido e informa o cliente).
-    if (mpMethod === "BOLETO" && (!customer.name?.trim() || !customer.cpf)) {
-      throw new Error(
-        "Para pagar com boleto, preencha seu nome completo e CPF em /perfil."
-      );
+    if (mpMethod === "BOLETO") {
+      if (!customer.name?.trim() || !customer.cpf) {
+        throw new Error(
+          "Para pagar com boleto, preencha seu nome completo e CPF em /perfil."
+        );
+      }
+      if (!isValidCpf(customer.cpf)) {
+        throw new Error(
+          "O CPF salvo em /perfil é inválido. Corrija-o em /perfil para usar boleto."
+        );
+      }
     }
 
     payResult = await createMercadoPagoPayment({

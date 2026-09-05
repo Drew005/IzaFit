@@ -57,7 +57,7 @@ export default function CardPaymentBrick({
     let cancelled = false;
     let brickReady = false;
 
-    // Se o Brick não ficar pronto em ~25s (SDK bloqueado, chave inválida ou
+    // Se o Brick não ficar pronto em ~15s (SDK bloqueado, chave inválida ou
     // erro silencioso do create), destrava a tela com a mensagem de indisponível
     // em vez de ficar preso em "Carregando formulário seguro do cartão…".
     const timeoutId = window.setTimeout(() => {
@@ -65,7 +65,7 @@ export default function CardPaymentBrick({
         setLoading(false);
         setUnavailable(true);
       }
-    }, 25000);
+    }, 15000);
     const clearBrickTimeout = () => window.clearTimeout(timeoutId);
 
     // Carrega o script do SDK do Mercado Pago se ainda não estiver presente.
@@ -156,6 +156,15 @@ export default function CardPaymentBrick({
         controllerRef.current = await mp
           .bricks()
           .create("cardPayment", "cardPaymentBrick_container", settings);
+
+        // O Brick já está montado no DOM. Em versões do SDK em que o
+        // onReady não é chamado (ou tem delay), garantimos que o
+        // "Carregando…" desaparece assim que o create() resolve.
+        if (!cancelled && !brickReady) {
+          brickReady = true;
+          clearBrickTimeout();
+          setLoading(false);
+        }
       })
       .catch((err) => {
         clearBrickTimeout();

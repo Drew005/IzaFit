@@ -9,6 +9,12 @@
 // =============================================================================
 
 // ---------------------------------------------------------------------------
+// Dependências
+// ---------------------------------------------------------------------------
+
+import { isValidCpf } from "@/lib/validators";
+
+// ---------------------------------------------------------------------------
 // Tipos
 // ---------------------------------------------------------------------------
 
@@ -268,6 +274,17 @@ function normalizeImageDataUri(value?: string): string | undefined {
 }
 
 /**
+ * Normaliza o estado (UF) para o padrão de 2 letras exigido pela API.
+ * Aceita "SP", "São Paulo (SP)", "SP - São Paulo" etc.
+ */
+function normalizeUf(value?: string): string | undefined {
+  if (!value) return undefined;
+  const s = value.trim().toUpperCase();
+  const match = s.match(/\(([A-Z]{2})\)/) ?? s.match(/\b[A-Z]{2}\b/);
+  return match?.[1] ?? match?.[0] ?? s.slice(0, 2);
+}
+
+/**
  * Monta o objeto `payer` da Orders API a partir dos dados do cliente.
  * Nome completo e endereço são obrigatórios para boleto e ajudam na taxa
  * de aprovação dos demais métodos.
@@ -302,14 +319,15 @@ function buildPayerObject(params: {
   }
 
   if (params.address) {
+    const zip = params.address.zipCode?.replace(/\D/g, "") ?? "";
     payer.address = {
-      zip_code: params.address.zipCode?.replace(/\D/g, "") ?? undefined,
+      zip_code: zip.length === 8 ? zip : undefined,
       street_name: params.address.street ?? undefined,
       street_number: params.address.number ?? undefined,
       complement: params.address.complement ?? undefined,
       neighborhood: params.address.district ?? undefined,
       city: params.address.city ?? undefined,
-      state: params.address.state ?? undefined,
+      state: normalizeUf(params.address.state),
     };
   }
 
@@ -381,18 +399,25 @@ export async function createMercadoPagoPayment(params: {
   let mpPaymentMethodId: string;
   let mpPaymentTypeId: string;
 
-  // Boleto exige nome completo, CPF e endereço do pagador na Orders API.
+  // Boleto exige nome completo, CPF válido e endereço do pagador na Orders API.
   // Falha rápido com mensagem amigável (o checkout cancela o pedido no catch).
   if (method === "BOLETO") {
     const missing: string[] = [];
     if (!payerName?.trim()) missing.push("nome completo");
-    if (!payerCpf) missing.push("CPF");
-    if (!payerAddress?.zipCode || !payerAddress.street || !payerAddress.city || !payerAddress.state) {
-      missing.push("endereço de entrega");
+    if (!payerCpf || !isValidCpf(payerCpf)) missing.push("CPF válido");
+    const zipDigits = payerAddress?.zipCode?.replace(/\D/g, "") ?? "";
+    if (
+      zipDigits.length !== 8 ||
+      !payerAddress?.street ||
+      !payerAddress?.number ||
+      !payerAddress?.city ||
+      !normalizeUf(payerAddress?.state)
+    ) {
+      missing.push("endereço de entrega completo (rua, número, cidade, UF e CEP)");
     }
     if (missing.length > 0) {
       throw new Error(
-        `Pagamento com boleto exige ${missing.join(", ")} preenchidos no perfil do cliente.`
+        `Pagamento com boleto exige ${missing.join(", ")}. Preencha em /perfil.`
       );
     }
   }

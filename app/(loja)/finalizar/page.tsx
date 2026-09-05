@@ -69,6 +69,7 @@ export default async function FinalizarPage() {
 
       <CheckoutForm
         customerName={customer.name}
+        customerCpf={customer.cpf ?? null}
         mpPublicKey={getMercadoPagoPublicKey()}
         addresses={addresses.map((a) => ({
           id: a.id,
