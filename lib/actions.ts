@@ -102,6 +102,19 @@ export async function createProduct(formData: FormData) {
       const colorList = formData.getAll("variantColor") as string[];
       const colorHexList = formData.getAll("variantColorHex") as string[];
       const sizeList = formData.getAll("variantSize") as string[];
+      const colorIndexList = formData.getAll("variantColorIndex") as string[];
+
+      // Upload e cache de imagens por cor (para que todos os tamanhos da mesma cor compartilhem a foto)
+      const colorImageMap = new Map<string, string>();
+      for (const [key, value] of formData.entries()) {
+        if (key.startsWith("colorImage_") && value instanceof File && value.size > 0) {
+          const colorKey = key.replace("colorImage_", "");
+          const uploaded = await uploadImage(value);
+          if (uploaded) {
+            colorImageMap.set(colorKey, uploaded);
+          }
+        }
+      }
 
       for (let i = 0; i < skuList.length; i++) {
         const sku = skuList[i]?.trim();
@@ -114,12 +127,17 @@ export async function createProduct(formData: FormData) {
         const color = colorList[i]?.trim() || null;
         const colorHex = colorHexList[i]?.trim() || null;
         const size = sizeList[i]?.trim() || null;
+        const colorIdx = colorIndexList[i] ?? "";
 
-        // Upload de imagem específica da variação/cor se enviada
+        // Upload de imagem específica da variação ou herdada da cor
         const varFile = formData.get(`variantImage_${i}`) as File | null;
         let varImageUrl: string | null = null;
         if (varFile && varFile.size > 0) {
           varImageUrl = await uploadImage(varFile);
+        } else if (colorImageMap.has(colorIdx)) {
+          varImageUrl = colorImageMap.get(colorIdx)!;
+        } else if (color && colorImageMap.has(color)) {
+          varImageUrl = colorImageMap.get(color)!;
         }
 
         const variant = await tx.productVariant.create({
@@ -220,32 +238,23 @@ export async function updateProduct(id: string, formData: FormData) {
 
   // Existing variants update
   const variantIds = formData.getAll("variantId") as string[];
-  const skus = formData.getAll("variantSku") as string[];
-  const costPrices = formData.getAll("variantCostPrice") as string[];
-  const sellPrices = formData.getAll("variantSellPrice") as string[];
-  const minStockAlerts = formData.getAll("variantMinStockAlert") as string[];
-  const actives = formData.getAll("variantActive") as string[];
+  const skus = formData.getAll("sku") as string[]; // Nome unificado com ProductForm
+  const costPrices = formData.getAll("costPrice") as string[];
+  const sellPrices = formData.getAll("sellPrice") as string[];
+  const stockQuantityList = formData.getAll("stockQuantity") as string[];
+  const minStockAlerts = formData.getAll("minStockAlert") as string[];
   const variantColors = formData.getAll("variantColor") as string[];
   const variantColorHexes = formData.getAll("variantColorHex") as string[];
   const variantSizes = formData.getAll("variantSize") as string[];
+  const colorIndexList = formData.getAll("variantColorIndex") as string[];
   const variantImageUrls = formData.getAll("variantImageUrl") as string[];
 
   // Removed variants
   const removedVariantIds = formData.getAll("removedVariantId") as string[];
 
-  // New variants
-  const newSkus = formData.getAll("newSku") as string[];
-  const newCostPrices = formData.getAll("newCostPrice") as string[];
-  const newSellPrices = formData.getAll("newSellPrice") as string[];
-  const newStockQuantities = formData.getAll("newStockQuantity") as string[];
-  const newMinStockAlerts = formData.getAll("newMinStockAlert") as string[];
-  const newColors = formData.getAll("newColor") as string[];
-  const newColorHexes = formData.getAll("newColorHex") as string[];
-  const newSizes = formData.getAll("newSize") as string[];
-  const newTempIds = formData.getAll("newTempId") as string[];
-
   await prisma.$transaction(async (tx) => {
-    await tx.product.update({
+    // 1. Atualizar informações do Produto
+    const prod = await tx.product.update({
       where: { id },
       data: {
         name,
@@ -260,119 +269,129 @@ export async function updateProduct(id: string, formData: FormData) {
       },
     });
 
-    // Process removed variants
-    for (const vId of removedVariantIds) {
-      if (!vId) continue;
-      const variant = await tx.productVariant.findUnique({
-        where: { id: vId },
-        include: {
-          _count: {
-            select: {
-              orderItems: true,
-              purchaseItems: true,
-            },
-          },
-        },
-      });
-
-      if (variant) {
-        if (variant._count.orderItems > 0 || variant._count.purchaseItems > 0) {
-          // Possui histórico de vendas ou compras de fornecedores: apenas desativa
-          await tx.productVariant.update({
-            where: { id: vId },
-            data: { active: false },
-          });
-        } else {
-          // Sem histórico vinculado: remove movimentações de estoque, descontos e deleta a variação
-          await tx.stockMovement.deleteMany({
-            where: { variantId: vId },
-          });
-          await tx.discount.updateMany({
-            where: { variantId: vId },
-            data: { variantId: null },
-          });
-          await tx.productVariant.delete({
-            where: { id: vId },
-          });
+    // 2. Cache de imagens por cor (para o novo fluxo de grade)
+    const colorImageMap = new Map<string, string>();
+    for (const [key, value] of formData.entries()) {
+      if (key.startsWith("colorImage_") && value instanceof File && value.size > 0) {
+        const colorKey = key.replace("colorImage_", "");
+        const uploaded = await uploadImage(value);
+        if (uploaded) {
+          colorImageMap.set(colorKey, uploaded);
         }
       }
     }
 
-    // Update existing variants
-    for (let i = 0; i < variantIds.length; i++) {
-      const vId = variantIds[i];
+    // 3. Processar remoções
+    for (const vId of removedVariantIds) {
       if (!vId) continue;
-
-      const varFile = formData.get(`variantImage_${vId}`) as File | null;
-      let varImgUrl = variantImageUrls[i] || null;
-      if (varFile && varFile.size > 0) {
-        const uploaded = await uploadImage(varFile);
-        if (uploaded) varImgUrl = uploaded;
-      }
-      const removeVarImg = formData.get(`removeVariantImage_${vId}`) === "true";
-      if (removeVarImg) {
-        varImgUrl = null;
-      }
-
-      await tx.productVariant.update({
+      const variant = await tx.productVariant.findUnique({
         where: { id: vId },
-        data: {
-          sku: skus[i],
-          color: variantColors[i]?.trim() || null,
-          colorHex: variantColorHexes[i]?.trim() || null,
-          size: variantSizes[i]?.trim() || null,
-          imageUrl: varImgUrl,
-          costPrice: parseFloat(costPrices[i] || "0"),
-          sellPrice: parseFloat(sellPrices[i] || "0"),
-          minStockAlert: parseInt(minStockAlerts[i] || "5", 10),
-          active: actives[i] === "true",
-        },
+        include: { _count: { select: { orderItems: true, purchaseItems: true } } },
       });
+
+      if (variant) {
+        if (variant._count.orderItems > 0 || variant._count.purchaseItems > 0) {
+          await tx.productVariant.update({ where: { id: vId }, data: { active: false } });
+        } else {
+          await tx.stockMovement.deleteMany({ where: { variantId: vId } });
+          await tx.discount.updateMany({ where: { variantId: vId }, data: { variantId: null } });
+          await tx.productVariant.delete({ where: { id: vId } });
+        }
+      }
     }
 
-    // Insert new variants
-    for (let i = 0; i < newSkus.length; i++) {
-      const sku = newSkus[i]?.trim();
-      if (!sku) continue;
+    // 4. Processar Variações (Upsert: Criar ou Atualizar)
+    if (skus && skus.length > 0) {
+      for (let i = 0; i < skus.length; i++) {
+        const vId = variantIds[i]; // Se existir, é um update. Se for vazio/undefined, é create.
+        const sku = skus[i]?.trim();
+        if (!sku) continue;
 
-      const costPrice = parseFloat(newCostPrices[i] || "0");
-      const sellPrice = parseFloat(newSellPrices[i] || "0");
-      const stockQuantity = parseInt(newStockQuantities[i] || "0", 10);
-      const minStockAlert = parseInt(newMinStockAlerts[i] || "5", 10);
-      const tempId = newTempIds[i];
-      const newVarFile = tempId
-        ? (formData.get(`newVariantImage_${tempId}`) as File | null)
-        : null;
-      let newVarImgUrl: string | null = null;
-      if (newVarFile && newVarFile.size > 0) {
-        newVarImgUrl = await uploadImage(newVarFile);
-      }
+        const costPrice = parseFloat(costPrices[i] || "0");
+        const sellPrice = parseFloat(sellPrices[i] || "0");
+        const stockQuantity = parseInt(stockQuantityList[i] || "0", 10);
+        const minStockAlert = parseInt(minStockAlerts[i] || "5", 10);
+        const color = variantColors[i]?.trim() || null;
+        const colorHex = variantColorHexes[i]?.trim() || null;
+        const size = variantSizes[i]?.trim() || null;
+        const colorIdx = colorIndexList[i] ?? "";
 
-      const variant = await tx.productVariant.create({
-        data: {
-          productId: id,
-          sku,
-          color: newColors[i]?.trim() || null,
-          colorHex: newColorHexes[i]?.trim() || null,
-          size: newSizes[i]?.trim() || null,
-          imageUrl: newVarImgUrl,
-          costPrice,
-          sellPrice,
-          stockQuantity,
-          minStockAlert,
-          active: true,
-        },
-      });
+        // Lógica de imagem: prioriza arquivo enviado p/ variante, depois cache da cor, depois mantem a atual
+        const varFile = formData.get(`variantImage_${i}`) as File | null;
+        const varFileById = vId ? (formData.get(`variantImage_${vId}`) as File | null) : null;
+        const fileToUse = varFile || varFileById;
 
-      if (stockQuantity > 0) {
-        await tx.stockMovement.create({
-          data: {
-            variantId: variant.id,
-            type: StockMovementType.PURCHASE_IN,
-            quantity: stockQuantity,
-            reason: "Estoque inicial de nova variação",
-          },
-        });
+        let varImgUrl = variantImageUrls[i] || null;
+        if (fileToUse && fileToUse.size > 0) {
+          const uploaded = await uploadImage(fileToUse);
+          if (uploaded) varImgUrl = uploaded;
+        } else if (colorIdx && colorImageMap.has(colorIdx)) {
+          varImgUrl = colorImageMap.get(colorIdx)!;
+        }
+
+        if (vId) {
+          // UPDATE
+          const oldVar = await tx.productVariant.findUnique({ where: { id: vId } });
+          await tx.productVariant.update({
+            where: { id: vId },
+            data: {
+              sku,
+              color,
+              colorHex,
+              size,
+              imageUrl: varImgUrl,
+              costPrice,
+              sellPrice,
+              minStockAlert,
+              active: true,
+            },
+          });
+
+          // Se o estoque informado for diferente do atual (cache), gera ajuste
+          if (oldVar && oldVar.stockQuantity !== stockQuantity) {
+            const diff = stockQuantity - oldVar.stockQuantity;
+            await tx.stockMovement.create({
+              data: {
+                variantId: vId,
+                type: StockMovementType.ADJUSTMENT,
+                quantity: Math.abs(diff),
+                reason: "Ajuste manual na edição do produto",
+              },
+            });
+            await tx.productVariant.update({
+              where: { id: vId },
+              data: { stockQuantity },
+            });
+          }
+        } else {
+          // CREATE
+          const variant = await tx.productVariant.create({
+            data: {
+              productId: id,
+              sku,
+              color,
+              colorHex,
+              size,
+              imageUrl: varImgUrl,
+              costPrice,
+              sellPrice,
+              stockQuantity,
+              minStockAlert,
+              active: true,
+            },
+          });
+
+          if (stockQuantity > 0) {
+            await tx.stockMovement.create({
+              data: {
+                variantId: variant.id,
+                type: StockMovementType.PURCHASE_IN,
+                quantity: stockQuantity,
+                reason: "Estoque inicial na edição do produto",
+              },
+            });
+          }
+        }
       }
     }
   });

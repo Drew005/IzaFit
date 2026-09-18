@@ -1,796 +1,94 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, Trash2, ArrowLeft, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { updateProduct, deleteProduct } from "@/lib/actions";
 import ProductImageUpload from "@/components/admin/ProductImageUpload";
 import ProductDetailsEditor from "@/components/admin/ProductDetailsEditor";
 
-interface Category {
-  id: string;
-  name: string;
-}
+type Category = { id: string; name: string };
+type Supplier = { id: string; name: string };
+type Variant = {
+  id: string; sku: string; color?: string | null; colorHex?: string | null;
+  size?: string | null; imageUrl?: string | null; costPrice: unknown;
+  sellPrice: unknown; stockQuantity: number; minStockAlert: number; active: boolean;
+};
+type Product = {
+  id: string; name: string; description: string | null; categoryId: string;
+  brand: string | null; supplierId: string | null; imageUrl?: string | null;
+  images?: string[]; details?: unknown; active: boolean; variants: Variant[];
+};
+type Color = { name: string; hex: string; index: number };
+type Cell = { variantId?: string; sku: string; cost: string; sell: string; stock: string; alert: string; active: boolean };
 
-interface Supplier {
-  id: string;
-  name: string;
-}
+const sizesDefault = ["PP", "P", "M", "G", "GG", "XG", "Único"];
 
-interface Variant {
-  id: string;
-  sku: string;
-  color?: string | null;
-  colorHex?: string | null;
-  size?: string | null;
-  imageUrl?: string | null;
-  costPrice: any;
-  sellPrice: any;
-  stockQuantity: number;
-  minStockAlert: number;
-  active: boolean;
-}
-
-interface Product {
-  id: string;
-  name: string;
-  description: string | null;
-  categoryId: string;
-  brand: string | null;
-  supplierId: string | null;
-  imageUrl?: string | null;
-  images?: string[];
-  details?: unknown;
-  active: boolean;
-  variants: Variant[];
-}
-
-interface NewVariantRow {
-  tempId: string;
-  sku: string;
-  color: string;
-  colorHex: string;
-  size: string;
-  costPrice: string;
-  sellPrice: string;
-  stockQuantity: string;
-  minStockAlert: string;
-}
-
-export default function EditProductForm({
-  product,
-  categories,
-  suppliers,
-}: {
-  product: Product;
-  categories: Category[];
-  suppliers: Supplier[];
+export default function EditProductForm({ product, categories, suppliers }: {
+  product: Product; categories: Category[]; suppliers: Supplier[];
 }) {
+  const initialColors = useMemo<Color[]>(() => {
+    const map = new Map<string, Color>();
+    product.variants.forEach((v, index) => {
+      const name = v.color?.trim() || "Padrão";
+      if (!map.has(name)) map.set(name, { name, hex: v.colorHex || "#777777", index: map.size });
+    });
+    return [...map.values()];
+  }, [product.variants]);
+  const initialSizes = useMemo(() => {
+    const values = product.variants.map((v) => v.size?.trim()).filter(Boolean) as string[];
+    return [...new Set(values.length ? values : ["Único"])];
+  }, [product.variants]);
+  const [colors, setColors] = useState(initialColors.length ? initialColors : [{ name: "Padrão", hex: "#777777", index: 0 }]);
+  const [sizes, setSizes] = useState(initialSizes);
   const [active, setActive] = useState(product.active);
-  const [variants, setVariants] = useState<Variant[]>(product.variants);
-  const [removedVariantIds, setRemovedVariantIds] = useState<string[]>([]);
-  const [newVariants, setNewVariants] = useState<NewVariantRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [removed, setRemoved] = useState<string[]>([]);
+  const [newSize, setNewSize] = useState("");
+  const [newColor, setNewColor] = useState("");
+  const [cells, setCells] = useState<Record<string, Cell>>(() => {
+    const result: Record<string, Cell> = {};
+    product.variants.forEach((v) => {
+      const color = v.color?.trim() || "Padrão";
+      const size = v.size?.trim() || "Único";
+      result[`${color}__${size}`] = {
+        variantId: v.id, sku: v.sku, cost: String(v.costPrice), sell: String(v.sellPrice),
+        stock: String(v.stockQuantity), alert: String(v.minStockAlert), active: v.active,
+      };
+    });
+    return result;
+  });
 
-  const updateProductWithId = updateProduct.bind(null, product.id);
-
-  function addNewVariant() {
-    const lastVar = variants[variants.length - 1];
-    setNewVariants((prev) => [
-      ...prev,
-      {
-        tempId: String(Date.now()),
-        sku: "",
-        color: lastVar?.color || "",
-        colorHex: lastVar?.colorHex || "#000000",
-        size: "",
-        costPrice: String(variants[0]?.costPrice ?? ""),
-        sellPrice: String(variants[0]?.sellPrice ?? ""),
-        stockQuantity: "0",
-        minStockAlert: "5",
-      },
-    ]);
-  }
-
-  function removeNewVariant(tempId: string) {
-    if (variants.length + newVariants.length <= 1) {
-      alert("O produto deve possuir pelo menos uma variação.");
-      return;
-    }
-    setNewVariants((prev) => prev.filter((v) => v.tempId !== tempId));
-  }
-
-  function removeExistingVariant(id: string) {
-    if (variants.length + newVariants.length <= 1) {
-      alert("O produto deve possuir pelo menos uma variação.");
-      return;
-    }
-    const confirm = window.confirm(
-      "Tem certeza que deseja remover esta variação? Caso ela possua histórico de vendas ou compras, ela será desativada para preservar os registros."
-    );
-    if (!confirm) return;
-
-    setVariants((prev) => prev.filter((v) => v.id !== id));
-    setRemovedVariantIds((prev) => [...prev, id]);
-  }
-
-  function updateExistingVariant(id: string, field: keyof Variant, value: any) {
-    setVariants((prev) =>
-      prev.map((v) => (v.id === id ? { ...v, [field]: value } : v))
-    );
-  }
-
-  function updateNewVariantField(
-    tempId: string,
-    field: keyof NewVariantRow,
-    value: string
-  ) {
-    setNewVariants((prev) =>
-      prev.map((v) => (v.tempId === tempId ? { ...v, [field]: value } : v))
-    );
-  }
-
-  async function handleDelete() {
-    const confirm = window.confirm(
-      "Tem certeza que deseja excluir este produto? Esta ação não pode ser desfeita."
-    );
-    if (!confirm) return;
-
-    setIsDeleting(true);
-    try {
-      await deleteProduct(product.id);
-    } catch (err: any) {
-      alert(err.message || "Erro ao excluir produto.");
-      setIsDeleting(false);
-    }
-  }
+  const updateCell = (key: string, patch: Partial<Cell>) => setCells((old) => ({ ...old, [key]: { ...old[key], ...patch } }));
+  const addSize = () => { const value = newSize.trim().toUpperCase(); if (value && !sizes.includes(value)) setSizes((s) => [...s, value]); setNewSize(""); };
+  const addColor = () => { const value = newColor.trim(); if (value && !colors.some((c) => c.name.toLowerCase() === value.toLowerCase())) setColors((c) => [...c, { name: value, hex: "#777777", index: c.length }]); setNewColor(""); };
+  const removeVariant = (id: string) => { if (window.confirm("Remover esta variação?")) setRemoved((r) => [...r, id]); };
 
   return (
-    <div className="space-y-8">
-      <form
-        action={updateProductWithId}
-        onSubmit={() => setLoading(true)}
-        encType="multipart/form-data"
-        className="space-y-8"
-      >
-        {/* Informações Principais */}
-        <div className="rounded-md border border-base-line bg-base-raised p-6 space-y-5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-medium text-ink">
-              Informações Principais
-            </h2>
-            <label className="flex items-center gap-2 text-xs text-ink cursor-pointer">
-              <input
-                type="hidden"
-                name="active"
-                value={active ? "true" : "false"}
-              />
-              <input
-                type="checkbox"
-                checked={active}
-                onChange={(e) => setActive(e.target.checked)}
-                className="rounded border-base-line bg-base text-volt focus:ring-0 focus:ring-offset-0"
-              />
-              <span>Produto Ativo no Catálogo</span>
-            </label>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-ink-soft mb-1.5">
-                Nome do produto *
-              </label>
-              <input
-                type="text"
-                name="name"
-                required
-                defaultValue={product.name}
-                className="w-full rounded-sm border border-base-line bg-base px-3 py-2 text-sm text-ink placeholder:text-ink-soft/40 focus:border-volt focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-medium text-ink-soft">
-                  Categoria *
-                </label>
-                <Link
-                  href="/admin/produtos/categorias/nova"
-                  target="_blank"
-                  className="text-[11px] text-volt hover:underline"
-                >
-                  + Nova categoria
-                </Link>
-              </div>
-              <select
-                name="categoryId"
-                required
-                defaultValue={product.categoryId}
-                className="w-full rounded-sm border border-base-line bg-base px-3 py-2 text-sm text-ink focus:border-volt focus:outline-none"
-              >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-ink-soft mb-1.5">
-                Marca
-              </label>
-              <input
-                type="text"
-                name="brand"
-                defaultValue={product.brand || ""}
-                className="w-full rounded-sm border border-base-line bg-base px-3 py-2 text-sm text-ink placeholder:text-ink-soft/40 focus:border-volt focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-ink-soft mb-1.5">
-                Fornecedor
-              </label>
-              <select
-                name="supplierId"
-                defaultValue={product.supplierId || ""}
-                className="w-full rounded-sm border border-base-line bg-base px-3 py-2 text-sm text-ink focus:border-volt focus:outline-none"
-              >
-                <option value="">Nenhum fornecedor vinculado</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-xs font-medium text-ink-soft mb-1.5">
-                Descrição
-              </label>
-              <textarea
-                name="description"
-                rows={3}
-                defaultValue={product.description || ""}
-                placeholder="Detalhes sobre medidas, tecido, benefícios..."
-                className="w-full rounded-sm border border-base-line bg-base px-3 py-2 text-sm text-ink placeholder:text-ink-soft/40 focus:border-volt focus:outline-none resize-none"
-              />
-            </div>
-          </div>
+    <form action={updateProduct.bind(null, product.id)} onSubmit={() => setLoading(true)} encType="multipart/form-data" className="space-y-8">
+      <input type="hidden" name="active" value={active ? "true" : "false"} />
+      {removed.map((id) => <input key={id} type="hidden" name="removedVariantId" value={id} />)}
+      <section className="rounded-md border border-base-line bg-base-raised p-6 space-y-5">
+        <div className="flex items-center justify-between"><h2 className="text-base font-medium text-ink">Informações principais</h2><label className="text-xs text-ink"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="mr-2" />Produto ativo</label></div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="text-xs text-ink-soft">Nome *<input name="name" required defaultValue={product.name} className="mt-1 w-full rounded border border-base-line bg-base px-3 py-2 text-sm text-ink" /></label>
+          <label className="text-xs text-ink-soft">Categoria *<select name="categoryId" required defaultValue={product.categoryId} className="mt-1 w-full rounded border border-base-line bg-base px-3 py-2 text-sm text-ink">{categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+          <label className="text-xs text-ink-soft">Marca<input name="brand" defaultValue={product.brand || ""} className="mt-1 w-full rounded border border-base-line bg-base px-3 py-2 text-sm text-ink" /></label>
+          <label className="text-xs text-ink-soft">Fornecedor<select name="supplierId" defaultValue={product.supplierId || ""} className="mt-1 w-full rounded border border-base-line bg-base px-3 py-2 text-sm text-ink"><option value="">Nenhum</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+          <label className="text-xs text-ink-soft md:col-span-2">Descrição<textarea name="description" defaultValue={product.description || ""} rows={3} className="mt-1 w-full rounded border border-base-line bg-base px-3 py-2 text-sm text-ink" /></label>
         </div>
-
-        {/* Fotos do produto */}
-        <ProductImageUpload
-          existing={[product.imageUrl, ...(product.images ?? [])].filter(
-            (url): url is string => Boolean(url)
-          )}
-        />
-
-        {/* Características & Detalhes */}
-        <ProductDetailsEditor value={product.details} />
-
-        {/* Variações Existentes */}
-        <div className="rounded-md border border-base-line bg-base-raised p-6 space-y-4">
-          {removedVariantIds.map((id) => (
-            <input key={id} type="hidden" name="removedVariantId" value={id} />
-          ))}
-          <div>
-            <h2 className="text-base font-medium text-ink">
-              Variações, Cores & Fotos Cadastradas
-            </h2>
-            <p className="text-xs text-ink-soft mt-0.5">
-              Edite as cores, tamanhos, fotos individuais, preços e estoque das variações existentes.
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[850px]">
-              <thead>
-                <tr className="text-left text-xs text-ink-soft border-b border-base-line">
-                  <th className="pb-2 font-normal">Foto da Cor</th>
-                  <th className="pb-2 font-normal">Cor & Amostra</th>
-                  <th className="pb-2 font-normal">Tam.</th>
-                  <th className="pb-2 font-normal">SKU *</th>
-                  <th className="pb-2 font-normal">Custo (R$)</th>
-                  <th className="pb-2 font-normal">Venda (R$)</th>
-                  <th className="pb-2 font-normal">Estoque</th>
-                  <th className="pb-2 font-normal">Alerta</th>
-                  <th className="pb-2 font-normal text-center">Ativa?</th>
-                  <th className="pb-2 font-normal text-right">Ação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-base-line/60">
-                {variants.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="py-4 text-center text-xs text-ink-soft italic">
-                      Nenhuma variação salva restante. Adicione novas variações abaixo antes de salvar.
-                    </td>
-                  </tr>
-                ) : (
-                  variants.map((v) => (
-                    <tr key={v.id}>
-                      {/* Foto da Variação */}
-                      <td className="py-2.5 pr-2">
-                        <input
-                          type="hidden"
-                          name="variantImageUrl"
-                          value={v.imageUrl || ""}
-                        />
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="file"
-                            name={`variantImage_${v.id}`}
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const previewEl = document.getElementById(`edit-preview-${v.id}`) as HTMLImageElement | null;
-                                if (previewEl) {
-                                  previewEl.src = URL.createObjectURL(file);
-                                  previewEl.classList.remove("hidden");
-                                }
-                              }
-                            }}
-                          />
-                          <div className="h-9 w-9 shrink-0 rounded border border-dashed border-base-line bg-base grid place-items-center overflow-hidden hover:border-volt/60 transition-colors">
-                            {v.imageUrl ? (
-                              <img
-                                id={`edit-preview-${v.id}`}
-                                src={v.imageUrl}
-                                alt=""
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <>
-                                <img
-                                  id={`edit-preview-${v.id}`}
-                                  alt=""
-                                  className="h-full w-full object-cover hidden"
-                                />
-                                <span className="text-[10px] text-ink-soft select-none pointer-events-none text-center leading-tight">
-                                  + Foto
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </label>
-                      </td>
-
-                      {/* Cor e Hexadecimal */}
-                      <td className="py-2.5 pr-2">
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="color"
-                            name="variantColorHex"
-                            value={v.colorHex || "#000000"}
-                            onChange={(e) =>
-                              updateExistingVariant(v.id, "colorHex", e.target.value)
-                            }
-                            title="Escolher tom da cor"
-                            className="h-7 w-7 rounded cursor-pointer border border-base-line bg-transparent p-0"
-                          />
-                          <input
-                            type="text"
-                            name="variantColor"
-                            placeholder="Ex: Preto, Rosa..."
-                            value={v.color || ""}
-                            onChange={(e) =>
-                              updateExistingVariant(v.id, "color", e.target.value)
-                            }
-                            className="w-28 rounded-sm border border-base-line bg-base px-2 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                          />
-                        </div>
-                      </td>
-
-                      {/* Tamanho */}
-                      <td className="py-2.5 pr-2">
-                        <input
-                          type="text"
-                          name="variantSize"
-                          placeholder="P, M, G..."
-                          value={v.size || ""}
-                          onChange={(e) =>
-                            updateExistingVariant(v.id, "size", e.target.value)
-                          }
-                          className="w-16 rounded-sm border border-base-line bg-base px-2 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                        />
-                      </td>
-
-                      {/* SKU */}
-                      <td className="py-2.5 pr-2">
-                        <input type="hidden" name="variantId" value={v.id} />
-                        <input
-                          type="text"
-                          name="variantSku"
-                          required
-                          value={v.sku}
-                          onChange={(e) =>
-                            updateExistingVariant(v.id, "sku", e.target.value)
-                          }
-                          className="w-28 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                        />
-                      </td>
-
-                      {/* Custo */}
-                      <td className="py-2.5 pr-2">
-                        <input
-                          type="number"
-                          name="variantCostPrice"
-                          step="0.01"
-                          min="0"
-                          required
-                          value={Number(v.costPrice)}
-                          onChange={(e) =>
-                            updateExistingVariant(
-                              v.id,
-                              "costPrice",
-                              e.target.value
-                            )
-                          }
-                          className="w-24 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                        />
-                      </td>
-
-                      {/* Venda */}
-                      <td className="py-2.5 pr-2">
-                        <input
-                          type="number"
-                          name="variantSellPrice"
-                          step="0.01"
-                          min="0"
-                          required
-                          value={Number(v.sellPrice)}
-                          onChange={(e) =>
-                            updateExistingVariant(
-                              v.id,
-                              "sellPrice",
-                              e.target.value
-                            )
-                          }
-                          className="w-24 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                        />
-                      </td>
-
-                      {/* Estoque */}
-                      <td className="py-2.5 pr-2">
-                        <span className="inline-block px-2 py-1.5 text-xs text-ink bg-base rounded-sm border border-base-line/50">
-                          {v.stockQuantity} un.
-                        </span>
-                      </td>
-
-                      {/* Alerta */}
-                      <td className="py-2.5 pr-2">
-                        <input
-                          type="number"
-                          name="variantMinStockAlert"
-                          min="1"
-                          value={v.minStockAlert}
-                          onChange={(e) =>
-                            updateExistingVariant(
-                              v.id,
-                              "minStockAlert",
-                              parseInt(e.target.value, 10) || 1
-                            )
-                          }
-                          className="w-16 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                        />
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-2.5 text-center">
-                        <input
-                          type="hidden"
-                          name="variantActive"
-                          value={v.active ? "true" : "false"}
-                        />
-                        <input
-                          type="checkbox"
-                          checked={v.active}
-                          onChange={(e) =>
-                            updateExistingVariant(v.id, "active", e.target.checked)
-                          }
-                          className="rounded border-base-line bg-base text-volt focus:ring-0"
-                        />
-                      </td>
-
-                      {/* Ação */}
-                      <td className="py-2.5 text-right">
-                        <button
-                          type="button"
-                          onClick={() => removeExistingVariant(v.id)}
-                          disabled={variants.length + newVariants.length <= 1}
-                          title="Remover variação"
-                          className="text-ink-soft hover:text-alert disabled:opacity-30 transition-colors p-1"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+      </section>
+      <ProductImageUpload existing={[product.imageUrl, ...(product.images || [])].filter((x): x is string => Boolean(x))} />
+      <ProductDetailsEditor value={product.details} />
+      <section className="rounded-md border border-base-line bg-base-raised p-6 space-y-5">
+        <div><h2 className="text-base font-medium text-ink">Cores, tamanhos e estoque</h2><p className="text-xs text-ink-soft">Cada combinação de cor e tamanho é uma variação vendável. As fotos da cor são compartilhadas entre seus tamanhos.</p></div>
+        <div className="flex flex-wrap gap-2"><input value={newColor} onChange={(e) => setNewColor(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addColor())} placeholder="Nova cor" className="rounded border border-base-line bg-base px-2 py-1.5 text-xs text-ink" /><button type="button" onClick={addColor} className="rounded border border-base-line px-3 py-1.5 text-xs text-ink"><Plus size={13} className="mr-1 inline text-volt" />Cor</button><input value={newSize} onChange={(e) => setNewSize(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSize())} placeholder="Novo tamanho" className="rounded border border-base-line bg-base px-2 py-1.5 text-xs text-ink" /><button type="button" onClick={addSize} className="rounded border border-base-line px-3 py-1.5 text-xs text-ink"><Plus size={13} className="mr-1 inline text-volt" />Tamanho</button></div>
+        <div className="space-y-6">
+          {colors.map((color, colorIndex) => <div key={color.name} className="rounded border border-base-line p-4"><div className="mb-3 flex items-center gap-2"><input type="color" value={color.hex} onChange={(e) => setColors((all) => all.map((c) => c.name === color.name ? { ...c, hex: e.target.value } : c))} className="h-7 w-7" /><strong className="text-sm text-ink">{color.name}</strong><label className="ml-auto cursor-pointer text-xs text-ink-soft">Foto da cor<input type="file" name={`colorImage_${colorIndex}`} accept="image/*" className="ml-2 text-xs" /></label></div><div className="overflow-x-auto"><table className="min-w-[850px] w-full text-xs"><thead><tr className="border-b border-base-line text-left text-ink-soft"><th className="pb-2">Tamanho</th><th>SKU</th><th>Custo</th><th>Venda</th><th>Estoque</th><th>Alerta</th><th>Ativa</th><th /></tr></thead><tbody>{sizes.map((size) => { const key = `${color.name}__${size}`; const cell = cells[key] || { sku: `${product.name.slice(0, 4).toUpperCase()}-${color.name.slice(0, 3).toUpperCase()}-${size}`, cost: "0", sell: "0", stock: "0", alert: "5", active: true }; const existing = product.variants.find((v) => v.id === cell.variantId); if (existing && removed.includes(existing.id)) return null; return <tr key={key} className="border-b border-base-line/40"><td className="py-2 font-medium text-ink">{size}<input type="hidden" name="variantId" value={cell.variantId || ""} /><input type="hidden" name="variantColor" value={color.name} /><input type="hidden" name="variantColorHex" value={color.hex} /><input type="hidden" name="variantSize" value={size} /><input type="hidden" name="variantColorIndex" value={colorIndex} /></td><td><input name="sku" required value={cell.sku} onChange={(e) => updateCell(key, { sku: e.target.value })} className="w-32 rounded border border-base-line bg-base px-2 py-1 text-ink" /></td><td><input name="costPrice" type="number" step=".01" value={cell.cost} onChange={(e) => updateCell(key, { cost: e.target.value })} className="w-20 rounded border border-base-line bg-base px-2 py-1 text-ink" /></td><td><input name="sellPrice" required type="number" step=".01" value={cell.sell} onChange={(e) => updateCell(key, { sell: e.target.value })} className="w-20 rounded border border-base-line bg-base px-2 py-1 text-ink" /></td><td><input name="stockQuantity" type="number" min="0" value={cell.stock} onChange={(e) => updateCell(key, { stock: e.target.value })} className="w-20 rounded border border-base-line bg-base px-2 py-1 text-ink" /></td><td><input name="minStockAlert" type="number" min="0" value={cell.alert} onChange={(e) => updateCell(key, { alert: e.target.value })} className="w-16 rounded border border-base-line bg-base px-2 py-1 text-ink" /></td><td><input type="hidden" name="variantActive" value={cell.active ? "true" : "false"} /><input type="checkbox" checked={cell.active} onChange={(e) => updateCell(key, { active: e.target.checked })} /></td><td>{cell.variantId && <button type="button" onClick={() => removeVariant(cell.variantId!)} className="text-ink-soft hover:text-alert"><Trash2 size={15} /></button>}</td></tr>; })}</tbody></table></div></div>)}
         </div>
-
-        {/* Adicionar Novas Variações */}
-        <div className="rounded-md border border-base-line bg-base-raised p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-medium text-ink">
-                Novas Variações
-              </h2>
-              <p className="text-xs text-ink-soft mt-0.5">
-                Adicione tamanhos, cores ou novas apresentações para este
-                produto.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={addNewVariant}
-              className="flex items-center gap-1.5 rounded-sm border border-base-line bg-base px-3 py-1.5 text-xs text-ink hover:border-volt/60 transition-colors"
-            >
-              <Plus size={14} className="text-volt" />
-              Adicionar nova variação
-            </button>
-          </div>
-
-          {newVariants.length === 0 ? (
-            <p className="text-xs text-ink-soft italic py-2">
-              Nenhuma variação adicional sendo adicionada.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[850px]">
-                <thead>
-                  <tr className="text-left text-xs text-ink-soft border-b border-base-line">
-                    <th className="pb-2 font-normal">Foto da Cor</th>
-                    <th className="pb-2 font-normal">Cor & Amostra</th>
-                    <th className="pb-2 font-normal">Tam.</th>
-                    <th className="pb-2 font-normal">SKU *</th>
-                    <th className="pb-2 font-normal">Custo (R$)</th>
-                    <th className="pb-2 font-normal">Venda (R$)</th>
-                    <th className="pb-2 font-normal">Estoque</th>
-                    <th className="pb-2 font-normal">Alerta</th>
-                    <th className="pb-2 font-normal text-right">Ação</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-base-line/60">
-                  {newVariants.map((nv) => (
-                    <tr key={nv.tempId}>
-                      <input type="hidden" name="newTempId" value={nv.tempId} />
-                      {/* Foto da Nova Variação */}
-                      <td className="py-2.5 pr-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="file"
-                            name={`newVariantImage_${nv.tempId}`}
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const previewEl = document.getElementById(`new-preview-${nv.tempId}`) as HTMLImageElement | null;
-                                if (previewEl) {
-                                  previewEl.src = URL.createObjectURL(file);
-                                  previewEl.classList.remove("hidden");
-                                }
-                              }
-                            }}
-                          />
-                          <div className="h-9 w-9 shrink-0 rounded border border-dashed border-base-line bg-base grid place-items-center overflow-hidden hover:border-volt/60 transition-colors">
-                            <img
-                              id={`new-preview-${nv.tempId}`}
-                              alt=""
-                              className="h-full w-full object-cover hidden"
-                            />
-                            <span className="text-[10px] text-ink-soft select-none pointer-events-none text-center leading-tight">
-                              + Foto
-                            </span>
-                          </div>
-                        </label>
-                      </td>
-
-                      {/* Cor e Hexadecimal */}
-                      <td className="py-2.5 pr-2">
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="color"
-                            name="newColorHex"
-                            value={nv.colorHex || "#000000"}
-                            onChange={(e) =>
-                              updateNewVariantField(nv.tempId, "colorHex", e.target.value)
-                            }
-                            title="Escolher tom da cor"
-                            className="h-7 w-7 rounded cursor-pointer border border-base-line bg-transparent p-0"
-                          />
-                          <input
-                            type="text"
-                            name="newColor"
-                            placeholder="Ex: Preto, Rosa..."
-                            value={nv.color || ""}
-                            onChange={(e) =>
-                              updateNewVariantField(nv.tempId, "color", e.target.value)
-                            }
-                            className="w-28 rounded-sm border border-base-line bg-base px-2 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                          />
-                        </div>
-                      </td>
-
-                      {/* Tamanho */}
-                      <td className="py-2.5 pr-2">
-                        <input
-                          type="text"
-                          name="newSize"
-                          placeholder="P, M, G..."
-                          value={nv.size || ""}
-                          onChange={(e) =>
-                            updateNewVariantField(nv.tempId, "size", e.target.value)
-                          }
-                          className="w-16 rounded-sm border border-base-line bg-base px-2 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                        />
-                      </td>
-
-                      {/* SKU */}
-                      <td className="py-2.5 pr-2">
-                        <input
-                          type="text"
-                          name="newSku"
-                          required
-                          placeholder="Ex: PROD-NOVO-G"
-                          value={nv.sku}
-                          onChange={(e) =>
-                            updateNewVariantField(
-                              nv.tempId,
-                              "sku",
-                              e.target.value
-                            )
-                          }
-                          className="w-28 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                        />
-                      </td>
-
-                      {/* Custo */}
-                      <td className="py-2.5 pr-2">
-                        <input
-                          type="number"
-                          name="newCostPrice"
-                          step="0.01"
-                          min="0"
-                          required
-                          value={nv.costPrice}
-                          onChange={(e) =>
-                            updateNewVariantField(
-                              nv.tempId,
-                              "costPrice",
-                              e.target.value
-                            )
-                          }
-                          className="w-24 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                        />
-                      </td>
-
-                      {/* Venda */}
-                      <td className="py-2.5 pr-2">
-                        <input
-                          type="number"
-                          name="newSellPrice"
-                          step="0.01"
-                          min="0"
-                          required
-                          value={nv.sellPrice}
-                          onChange={(e) =>
-                            updateNewVariantField(
-                              nv.tempId,
-                              "sellPrice",
-                              e.target.value
-                            )
-                          }
-                          className="w-24 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                        />
-                      </td>
-
-                      {/* Estoque */}
-                      <td className="py-2.5 pr-2">
-                        <input
-                          type="number"
-                          name="newStockQuantity"
-                          min="0"
-                          value={nv.stockQuantity}
-                          onChange={(e) =>
-                            updateNewVariantField(
-                              nv.tempId,
-                              "stockQuantity",
-                              e.target.value
-                            )
-                          }
-                          className="w-20 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                        />
-                      </td>
-
-                      {/* Alerta */}
-                      <td className="py-2.5 pr-2">
-                        <input
-                          type="number"
-                          name="newMinStockAlert"
-                          min="1"
-                          value={nv.minStockAlert}
-                          onChange={(e) =>
-                            updateNewVariantField(
-                              nv.tempId,
-                              "minStockAlert",
-                              e.target.value
-                            )
-                          }
-                          className="w-16 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                        />
-                      </td>
-
-                      {/* Ação */}
-                      <td className="py-2.5 text-right">
-                        <button
-                          type="button"
-                          onClick={() => removeNewVariant(nv.tempId)}
-                          disabled={variants.length + newVariants.length <= 1}
-                          className="text-ink-soft hover:text-alert disabled:opacity-30 transition-colors p-1"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Botões de Ação */}
-        <div className="flex items-center justify-between pt-2">
-          <Link
-            href="/admin/produtos"
-            className="flex items-center gap-2 rounded-sm border border-base-line bg-base-raised px-4 py-2 text-sm text-ink-soft hover:text-ink transition-colors"
-          >
-            <ArrowLeft size={16} />
-            Voltar para produtos
-          </Link>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex items-center gap-2 rounded-sm bg-volt text-base px-6 py-2.5 text-sm font-medium hover:bg-volt-dim disabled:opacity-50 transition-colors"
-          >
-            {loading ? "Salvando alterações..." : "Salvar Alterações"}
-          </button>
-        </div>
-      </form>
-
-      {/* Zona de Perigo / Exclusão */}
-      <div className="rounded-md border border-alert/30 bg-alert/5 p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <h3 className="text-sm font-medium text-alert flex items-center gap-2">
-            <AlertTriangle size={16} />
-            Excluir produto
-          </h3>
-          <p className="text-xs text-ink-soft mt-1">
-            Esta ação excluirá o produto e todas as variações vinculadas a ele.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={handleDelete}
-          disabled={isDeleting}
-          className="flex items-center gap-2 px-4 py-2 rounded-sm border border-alert/40 text-alert text-xs font-medium hover:bg-alert hover:text-base transition-colors disabled:opacity-50"
-        >
-          <Trash2 size={14} />
-          {isDeleting ? "Excluindo..." : "Excluir permanentemente"}
-        </button>
-      </div>
-    </div>
+      </section>
+      <div className="flex items-center justify-between"><Link href="/admin/produtos" className="rounded border border-base-line px-4 py-2 text-sm text-ink-soft"><ArrowLeft size={15} className="mr-1 inline" />Voltar</Link><button type="submit" disabled={loading} className="rounded bg-volt px-6 py-2.5 text-sm font-medium text-base disabled:opacity-50">{loading ? "Salvando..." : "Salvar alterações"}</button></div>
+      <div className="flex justify-end"><button type="button" onClick={() => window.confirm("Excluir produto permanentemente?") && deleteProduct(product.id)} className="text-xs text-alert">Excluir produto</button></div>
+    </form>
   );
 }

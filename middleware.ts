@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
-const SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
+const SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || "izafit-jwt-secret-session-key-dev"
+);
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

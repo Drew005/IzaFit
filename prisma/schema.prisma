@@ -183,12 +183,30 @@ model Product {
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
 
-  variants  ProductVariant[]
-  gifts     Gift[]
+  colors   ProductColor[]
+  variants ProductVariant[]
+  gifts    Gift[]
   discounts Discount[] @relation("ProductDiscount")
   discountProducts DiscountProduct[]
 
   @@index([categoryId])
+}
+
+// Cor independente do tamanho. Uma cor pode ter várias fotos e vários tamanhos.
+model ProductColor {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String
+  hex       String?
+  images    String[] @default([])
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  variants ProductVariant[]
+
+  @@unique([productId, name])
+  @@index([productId])
 }
 
 // Atributo dinâmico do produto/variante: Tamanho, Cor, Sabor, Peso...
@@ -217,10 +235,14 @@ model ProductVariant {
   id            String   @id @default(cuid())
   productId     String
   product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  colorId       String?
+  productColor  ProductColor? @relation(fields: [colorId], references: [id], onDelete: SetNull)
   sku           String   @unique
   barcode       String?  @unique
-  color         String?  // Ex: "Preto", "Rosa Pink", "Azul Marinho"
-  colorHex      String?  // Ex: "#000000", "#FF1493" (código hexadecimal da cor para bolinhas de swatch)
+  // Legado: mantido para compatibilidade com variações antigas.
+  // Novos produtos usam ProductColor + colorId.
+  color         String?
+  colorHex      String?
   size          String?  // Ex: "P", "M", "G", "GG", "Único"
   imageUrl      String?  // Foto específica desta cor/variação
   costPrice     Decimal  @db.Decimal(10, 2) // quanto custou comprar/produzir
