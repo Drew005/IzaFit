@@ -7,7 +7,16 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { parseProductDetails } from "@/lib/product-details";
 import { hash } from "bcryptjs";
+import { canAccess, StaffRole } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/auth";
+
+// Função utilitária para proteger actions
+async function assertCanAccess(actionPath: string) {
+  const user = await getCurrentUser();
+  if (!user || !canAccess(user.role as StaffRole, actionPath)) {
+    throw new Error("Acesso não autorizado.");
+  }
+}
 import { findEligibleGifts } from "@/lib/gift-eligibility";
 import {
   CouponType,
@@ -47,6 +56,7 @@ const OrderSchema = z.object({
 // Upload de imagens agora via Supabase Storage (ver lib/upload.ts).
 // =============================================================================
 export async function createProduct(formData: FormData) {
+  await assertCanAccess("/admin/produtos");
   // — Validação —
   const data = ProductSchema.safeParse({
     name: formData.get("name"),
@@ -426,6 +436,7 @@ export async function deleteProduct(id: string) {
 // =============================================================================
 
 export async function createCategory(formData: FormData) {
+  await assertCanAccess("/admin/produtos");
   const name = formData.get("name") as string;
   let slug = (formData.get("slug") as string)?.trim();
   const parentId = (formData.get("parentId") as string) || null;
@@ -868,6 +879,17 @@ export async function createOrder(formData: FormData) {
 
       // Se pedido pago/concluído/enviado, debita estoque
       if (["PAID", "COMPLETED", "SHIPPED"].includes(status)) {
+        // --- VALIDAÇÃO DE ESTOQUE ---
+        const variant = await tx.productVariant.findUnique({
+          where: { id: vId },
+          select: { stockQuantity: true },
+        });
+
+        if (!variant || variant.stockQuantity < qty) {
+          throw new Error(`Estoque insuficiente para o produto ${vId}`);
+        }
+        // -----------------------------
+
         await tx.productVariant.update({
           where: { id: vId },
           data: {
