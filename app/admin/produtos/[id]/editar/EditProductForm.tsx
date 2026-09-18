@@ -61,6 +61,7 @@ export default function EditProductForm({
 }) {
   const [active, setActive] = useState(product.active);
   const [variants, setVariants] = useState<Variant[]>(product.variants);
+  const [removedVariantIds, setRemovedVariantIds] = useState<string[]>([]);
   const [newVariants, setNewVariants] = useState<NewVariantRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -82,7 +83,25 @@ export default function EditProductForm({
   }
 
   function removeNewVariant(tempId: string) {
+    if (variants.length + newVariants.length <= 1) {
+      alert("O produto deve possuir pelo menos uma variação.");
+      return;
+    }
     setNewVariants((prev) => prev.filter((v) => v.tempId !== tempId));
+  }
+
+  function removeExistingVariant(id: string) {
+    if (variants.length + newVariants.length <= 1) {
+      alert("O produto deve possuir pelo menos uma variação.");
+      return;
+    }
+    const confirm = window.confirm(
+      "Tem certeza que deseja remover esta variação? Caso ela possua histórico de vendas ou compras, ela será desativada para preservar os registros."
+    );
+    if (!confirm) return;
+
+    setVariants((prev) => prev.filter((v) => v.id !== id));
+    setRemovedVariantIds((prev) => [...prev, id]);
   }
 
   function updateExistingVariant(id: string, field: keyof Variant, value: any) {
@@ -244,13 +263,16 @@ export default function EditProductForm({
 
         {/* Variações Existentes */}
         <div className="rounded-md border border-base-line bg-base-raised p-6 space-y-4">
+          {removedVariantIds.map((id) => (
+            <input key={id} type="hidden" name="removedVariantId" value={id} />
+          ))}
           <div>
             <h2 className="text-base font-medium text-ink">
               Variações Cadastradas
             </h2>
             <p className="text-xs text-ink-soft mt-0.5">
               Edite os preços de custo, venda, alerta de estoque e status das
-              variações já existentes.
+              variações já existentes, ou remova variações desnecessárias.
             </p>
           </div>
 
@@ -264,98 +286,118 @@ export default function EditProductForm({
                   <th className="pb-2 font-normal">Estoque Atual</th>
                   <th className="pb-2 font-normal">Alerta Mín.</th>
                   <th className="pb-2 font-normal text-center">Ativa?</th>
+                  <th className="pb-2 font-normal text-right">Ação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-base-line/60">
-                {variants.map((v) => (
-                  <tr key={v.id}>
-                    <td className="py-2.5 pr-2">
-                      <input type="hidden" name="variantId" value={v.id} />
-                      <input
-                        type="text"
-                        name="variantSku"
-                        required
-                        value={v.sku}
-                        onChange={(e) =>
-                          updateExistingVariant(v.id, "sku", e.target.value)
-                        }
-                        className="w-full rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                      />
-                    </td>
-                    <td className="py-2.5 pr-2">
-                      <input
-                        type="number"
-                        name="variantCostPrice"
-                        step="0.01"
-                        min="0"
-                        required
-                        value={Number(v.costPrice)}
-                        onChange={(e) =>
-                          updateExistingVariant(
-                            v.id,
-                            "costPrice",
-                            e.target.value
-                          )
-                        }
-                        className="w-28 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                      />
-                    </td>
-                    <td className="py-2.5 pr-2">
-                      <input
-                        type="number"
-                        name="variantSellPrice"
-                        step="0.01"
-                        min="0"
-                        required
-                        value={Number(v.sellPrice)}
-                        onChange={(e) =>
-                          updateExistingVariant(
-                            v.id,
-                            "sellPrice",
-                            e.target.value
-                          )
-                        }
-                        className="w-28 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                      />
-                    </td>
-                    <td className="py-2.5 pr-2">
-                      <span className="inline-block px-2.5 py-1.5 text-xs text-ink bg-base rounded-sm border border-base-line/50">
-                        {v.stockQuantity} un.
-                      </span>
-                    </td>
-                    <td className="py-2.5 pr-2">
-                      <input
-                        type="number"
-                        name="variantMinStockAlert"
-                        min="1"
-                        value={v.minStockAlert}
-                        onChange={(e) =>
-                          updateExistingVariant(
-                            v.id,
-                            "minStockAlert",
-                            parseInt(e.target.value, 10) || 1
-                          )
-                        }
-                        className="w-20 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
-                      />
-                    </td>
-                    <td className="py-2.5 text-center">
-                      <input
-                        type="hidden"
-                        name="variantActive"
-                        value={v.active ? "true" : "false"}
-                      />
-                      <input
-                        type="checkbox"
-                        checked={v.active}
-                        onChange={(e) =>
-                          updateExistingVariant(v.id, "active", e.target.checked)
-                        }
-                        className="rounded border-base-line bg-base text-volt focus:ring-0"
-                      />
+                {variants.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-4 text-center text-xs text-ink-soft italic">
+                      Nenhuma variação salva restante. Adicione novas variações abaixo antes de salvar.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  variants.map((v) => (
+                    <tr key={v.id}>
+                      <td className="py-2.5 pr-2">
+                        <input type="hidden" name="variantId" value={v.id} />
+                        <input
+                          type="text"
+                          name="variantSku"
+                          required
+                          value={v.sku}
+                          onChange={(e) =>
+                            updateExistingVariant(v.id, "sku", e.target.value)
+                          }
+                          className="w-full rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                        />
+                      </td>
+                      <td className="py-2.5 pr-2">
+                        <input
+                          type="number"
+                          name="variantCostPrice"
+                          step="0.01"
+                          min="0"
+                          required
+                          value={Number(v.costPrice)}
+                          onChange={(e) =>
+                            updateExistingVariant(
+                              v.id,
+                              "costPrice",
+                              e.target.value
+                            )
+                          }
+                          className="w-28 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                        />
+                      </td>
+                      <td className="py-2.5 pr-2">
+                        <input
+                          type="number"
+                          name="variantSellPrice"
+                          step="0.01"
+                          min="0"
+                          required
+                          value={Number(v.sellPrice)}
+                          onChange={(e) =>
+                            updateExistingVariant(
+                              v.id,
+                              "sellPrice",
+                              e.target.value
+                            )
+                          }
+                          className="w-28 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                        />
+                      </td>
+                      <td className="py-2.5 pr-2">
+                        <span className="inline-block px-2.5 py-1.5 text-xs text-ink bg-base rounded-sm border border-base-line/50">
+                          {v.stockQuantity} un.
+                        </span>
+                      </td>
+                      <td className="py-2.5 pr-2">
+                        <input
+                          type="number"
+                          name="variantMinStockAlert"
+                          min="1"
+                          value={v.minStockAlert}
+                          onChange={(e) =>
+                            updateExistingVariant(
+                              v.id,
+                              "minStockAlert",
+                              parseInt(e.target.value, 10) || 1
+                            )
+                          }
+                          className="w-20 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                        />
+                      </td>
+                      <td className="py-2.5 text-center">
+                        <input
+                          type="hidden"
+                          name="variantActive"
+                          value={v.active ? "true" : "false"}
+                        />
+                        <input
+                          type="checkbox"
+                          checked={v.active}
+                          onChange={(e) =>
+                            updateExistingVariant(v.id, "active", e.target.checked)
+                          }
+                          className="rounded border-base-line bg-base text-volt focus:ring-0"
+                        />
+                      </td>
+                      <td className="py-2.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => removeExistingVariant(v.id)}
+                          disabled={variants.length + newVariants.length <= 1}
+                          title="Remover variação"
+                          className="text-ink-soft hover:text-alert disabled:opacity-30 transition-colors p-1"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -493,7 +535,8 @@ export default function EditProductForm({
                         <button
                           type="button"
                           onClick={() => removeNewVariant(nv.tempId)}
-                          className="text-ink-soft hover:text-alert transition-colors p-1"
+                          disabled={variants.length + newVariants.length <= 1}
+                          className="text-ink-soft hover:text-alert disabled:opacity-30 transition-colors p-1"
                         >
                           <Trash2 size={16} />
                         </button>

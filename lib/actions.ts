@@ -208,6 +208,9 @@ export async function updateProduct(id: string, formData: FormData) {
   const minStockAlerts = formData.getAll("variantMinStockAlert") as string[];
   const actives = formData.getAll("variantActive") as string[];
 
+  // Removed variants
+  const removedVariantIds = formData.getAll("removedVariantId") as string[];
+
   // New variants
   const newSkus = formData.getAll("newSku") as string[];
   const newCostPrices = formData.getAll("newCostPrice") as string[];
@@ -230,6 +233,44 @@ export async function updateProduct(id: string, formData: FormData) {
         active,
       },
     });
+
+    // Process removed variants
+    for (const vId of removedVariantIds) {
+      if (!vId) continue;
+      const variant = await tx.productVariant.findUnique({
+        where: { id: vId },
+        include: {
+          _count: {
+            select: {
+              orderItems: true,
+              purchaseItems: true,
+            },
+          },
+        },
+      });
+
+      if (variant) {
+        if (variant._count.orderItems > 0 || variant._count.purchaseItems > 0) {
+          // Possui histórico de vendas ou compras de fornecedores: apenas desativa
+          await tx.productVariant.update({
+            where: { id: vId },
+            data: { active: false },
+          });
+        } else {
+          // Sem histórico vinculado: remove movimentações de estoque, descontos e deleta a variação
+          await tx.stockMovement.deleteMany({
+            where: { variantId: vId },
+          });
+          await tx.discount.updateMany({
+            where: { variantId: vId },
+            data: { variantId: null },
+          });
+          await tx.productVariant.delete({
+            where: { id: vId },
+          });
+        }
+      }
+    }
 
     // Update existing variants
     for (let i = 0; i < variantIds.length; i++) {
