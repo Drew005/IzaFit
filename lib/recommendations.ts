@@ -11,6 +11,10 @@ export type RecommendedProduct = {
     id: string;
     sellPrice: number | { toString(): string };
     stockQuantity: number;
+    color?: string | null;
+    colorHex?: string | null;
+    size?: string | null;
+    imageUrl?: string | null;
   }[];
   recommendationReason?:
     | "bought_together"
@@ -116,7 +120,15 @@ export async function getRecommendationsForProduct(
                 category: { select: { name: true, slug: true } },
                 variants: {
                   where: { active: true },
-                  select: { id: true, sellPrice: true, stockQuantity: true },
+                  select: {
+                    id: true,
+                    sellPrice: true,
+                    stockQuantity: true,
+                    color: true,
+                    colorHex: true,
+                    size: true,
+                    imageUrl: true,
+                  },
                 },
               },
             },
@@ -158,7 +170,15 @@ export async function getRecommendationsForProduct(
         category: { select: { name: true, slug: true } },
         variants: {
           where: { active: true },
-          select: { id: true, sellPrice: true, stockQuantity: true },
+          select: {
+            id: true,
+            sellPrice: true,
+            stockQuantity: true,
+            color: true,
+            colorHex: true,
+            size: true,
+            imageUrl: true,
+          },
         },
       },
       orderBy: [{ createdAt: "desc" }],
@@ -184,7 +204,15 @@ export async function getRecommendationsForProduct(
         category: { select: { name: true, slug: true } },
         variants: {
           where: { active: true },
-          select: { id: true, sellPrice: true, stockQuantity: true },
+          select: {
+            id: true,
+            sellPrice: true,
+            stockQuantity: true,
+            color: true,
+            colorHex: true,
+            size: true,
+            imageUrl: true,
+          },
         },
       },
       orderBy: [{ createdAt: "desc" }],
@@ -248,7 +276,15 @@ export async function getCatalogRecommendations(
       category: { select: { name: true, slug: true } },
       variants: {
         where: { active: true },
-        select: { id: true, sellPrice: true, stockQuantity: true },
+        select: {
+          id: true,
+          sellPrice: true,
+          stockQuantity: true,
+          color: true,
+          colorHex: true,
+          size: true,
+          imageUrl: true,
+        },
       },
     },
     orderBy: { createdAt: "desc" },

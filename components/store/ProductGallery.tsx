@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Shirt, ChevronLeft, ChevronRight, X as XIcon, ZoomIn } from "lucide-react";
 
 export default function ProductGallery({
@@ -15,6 +15,13 @@ export default function ProductGallery({
   const [active, setActive] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const list = images.filter(Boolean);
+
+  // Reseta para a primeira foto quando a foto principal mudar (ex.: ao trocar de cor)
+  useEffect(() => {
+    setActive(0);
+  }, [images[0]]);
+
+  const safeActive = active < list.length ? active : 0;
 
   const prev = useCallback(() => {
     if (list.length === 0) return;
@@ -34,7 +41,7 @@ export default function ProductGallery({
           {list.length > 0 ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={list[active]}
+              src={list[safeActive]}
               alt={name}
               className="h-full w-full object-cover"
             />
@@ -86,7 +93,7 @@ export default function ProductGallery({
           {/* Contador */}
           {list.length > 1 && (
             <span className="absolute bottom-4 left-4 rounded-sm bg-black/50 px-2.5 py-1 text-xs font-medium text-white backdrop-blur">
-              {active + 1} / {list.length}
+              {safeActive + 1} / {list.length}
             </span>
           )}
         </div>
@@ -100,7 +107,7 @@ export default function ProductGallery({
                 type="button"
                 onClick={() => setActive(i)}
                 className={`h-16 w-16 shrink-0 overflow-hidden rounded-md border-2 transition-all ${
-                  i === active
+                  i === safeActive
                     ? "border-volt shadow-[0_0_0_1px_rgba(200,255,77,0.3)]"
                     : "border-base-line opacity-60 hover:opacity-100"
                 }`}
@@ -137,7 +144,7 @@ export default function ProductGallery({
           {/* Imagem */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={list[active]}
+            src={list[safeActive]}
             alt={name}
             className="max-h-[85vh] max-w-[90vw] object-contain"
           />
@@ -169,7 +176,7 @@ export default function ProductGallery({
           {/* Contador */}
           {list.length > 1 && (
             <span className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-sm bg-white/10 px-3 py-1.5 text-sm font-medium text-white backdrop-blur">
-              {active + 1} / {list.length}
+              {safeActive + 1} / {list.length}
             </span>
           )}
 
@@ -182,7 +189,7 @@ export default function ProductGallery({
                   type="button"
                   onClick={() => setActive(i)}
                   className={`h-12 w-12 shrink-0 overflow-hidden rounded-md border-2 transition-all ${
-                    i === active
+                    i === safeActive
                       ? "border-volt"
                       : "border-transparent opacity-50 hover:opacity-80"
                   }`}
