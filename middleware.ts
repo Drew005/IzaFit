@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
+import { canAccess } from "@/lib/auth"; // Importando a nova lógica
 
 const SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "izafit-jwt-secret-session-key-dev"
@@ -20,21 +21,11 @@ export async function middleware(request: NextRequest) {
       const { payload } = await jwtVerify(token, SECRET);
       const role = payload.role as string;
 
-      // Restrições por role
-      const restrictedForSeller =
-        pathname.startsWith("/admin/financeiro") ||
-        pathname.startsWith("/admin/compras") ||
-        pathname.startsWith("/admin/cupons");
-
-      if (role === "SELLER" && restrictedForSeller) {
-        return NextResponse.redirect(new URL("/admin", request.url));
-      }
-
-      if (role !== "ADMIN" && pathname.startsWith("/admin/usuarios")) {
+      // Verificação centralizada de acesso
+      if (!canAccess(role, pathname)) {
         return NextResponse.redirect(new URL("/admin", request.url));
       }
     } catch {
-      // Token inválido ou expirado
       const response = NextResponse.redirect(new URL("/login", request.url));
       response.cookies.delete("session");
       return response;

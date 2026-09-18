@@ -12,22 +12,8 @@ export default async function AdminLayout({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const pathname = headers().get("x-izafit-pathname") ?? "/admin";
-  const isSeller = user.role === "SELLER";
-  const isAdmin = user.role === "ADMIN";
-  const restrictedForSeller =
-    pathname.startsWith("/admin/financeiro") ||
-    pathname.startsWith("/admin/compras") ||
-    pathname.startsWith("/admin/cupons");
-
-  if (isSeller && restrictedForSeller) {
-    redirect("/admin");
-  }
-
-  // Gestão de contas é exclusiva do Administrador.
-  if (!isAdmin && pathname.startsWith("/admin/usuarios")) {
-    redirect("/admin");
-  }
+  // O middleware agora cuida de redirecionar acessos negados.
+  // Aqui apenas mantemos a garantia de tipo para o Sidebar.
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row bg-base">
