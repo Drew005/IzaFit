@@ -5,8 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { currency } from "@/lib/format";
 import { parseProductDetails } from "@/lib/product-details";
 import { getActiveDiscounts, computeVariantDiscount } from "@/lib/discounts";
+import { getRecommendationsForProduct } from "@/lib/recommendations";
 import ProductGallery from "@/components/store/ProductGallery";
 import BuyBox from "@/components/store/BuyBox";
+import ProductRecommendations from "@/components/store/ProductRecommendations";
 
 export const dynamic = "force-dynamic";
 
@@ -15,16 +17,20 @@ export default async function ProdutoDetalhePage({
 }: {
   params: { id: string };
 }) {
-  const product = await prisma.product.findUnique({
-    where: { id: params.id },
-    include: {
-      category: true,
-      variants: {
-        where: { active: true },
-        orderBy: { sellPrice: "asc" },
+  const [product, recommendations, activeDiscounts] = await Promise.all([
+    prisma.product.findUnique({
+      where: { id: params.id },
+      include: {
+        category: true,
+        variants: {
+          where: { active: true },
+          orderBy: { sellPrice: "asc" },
+        },
       },
-    },
-  });
+    }),
+    getRecommendationsForProduct(params.id, 4),
+    getActiveDiscounts(),
+  ]);
 
   if (!product || !product.active) {
     notFound();
@@ -34,7 +40,6 @@ export default async function ProdutoDetalhePage({
   const hasStock = inStockVariants.length > 0;
 
   // Descontos automáticos por variação.
-  const activeDiscounts = await getActiveDiscounts();
   const discountById: Record<
     string,
     { originalPrice: number; finalPrice: number; discountId: string | null; discountName: string | null }
@@ -219,6 +224,18 @@ export default async function ProdutoDetalhePage({
             ))}
           </div>
         </section>
+      )}
+
+      {/* Sistema de Recomendação de Produtos */}
+      {recommendations.length > 0 && (
+        <div className="mt-16 border-t border-base-line pt-12">
+          <ProductRecommendations
+            products={recommendations}
+            title="Quem viu este produto também comprou"
+            subtitle="Itens selecionados que combinam com o seu estilo para completar o look"
+            showViewAll
+          />
+        </div>
       )}
     </div>
   );
