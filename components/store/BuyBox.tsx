@@ -122,7 +122,7 @@ export default function BuyBox({
             id: productId,
             name: productName,
             imageUrl,
-            price: variants.length ? Math.min(...variants.map((v) => effectivePrice(v))) : null,
+            price: variants.length ? Math.min(...variants.map((v) => effectivePrice(v))) : 0,
           })
         }
         className={`mt-4 inline-flex items-center gap-2 rounded-sm border px-3 py-2 text-sm transition-colors ${

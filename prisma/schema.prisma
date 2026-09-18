@@ -214,6 +214,7 @@ model Product {
   colors   ProductColor[]
   variants ProductVariant[]
   gifts    Gift[]
+  favorites Favorite[]
   discounts Discount[] @relation("ProductDiscount")
   discountProducts DiscountProduct[]
 
@@ -285,6 +286,7 @@ model ProductVariant {
   attributeValues VariantAttributeValue[]
   stockMovements  StockMovement[]
   orderItems      OrderItem[]
+  cartItems       CartItem[]
   purchaseItems   PurchaseItem[]
   discounts       Discount[] @relation("VariantDiscount")
 

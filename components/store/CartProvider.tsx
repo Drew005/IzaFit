@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { getCart, saveCartItem, removeCartItem } from "@/lib/actions/store-sync";
 
 export type CartItem = {
   key: string; // variantId
@@ -30,14 +31,51 @@ const KEY = "izafit_cart";
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [ready, setReady] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Hydrate from localStorage on mount
+  // Hydrate from localStorage on mount and sync with DB
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) setItems(JSON.parse(raw));
-    } catch {}
-    setReady(true);
+    async function init() {
+      const remoteItems = await getCart();
+      const localRaw = localStorage.getItem(KEY);
+      const localItems: CartItem[] = localRaw ? JSON.parse(localRaw) : [];
+
+      if (remoteItems.length > 0) {
+        setIsLoggedIn(true);
+        // Merge strategy: remote is source of truth? 
+        // Let's assume for now we merge remote items with local items,
+        // and if both exist, we prioritize remote or sum them?
+        // Simple merge: remoteItems are persisted, so they are the baseline.
+        
+        // This part needs careful design.
+        const merged = [...remoteItems.map(ri => ({
+            key: ri.variantId,
+            productId: ri.variant.productId,
+            variantId: ri.variantId,
+            name: ri.variant.product.name,
+            sku: ri.variant.sku,
+            imageUrl: ri.variant.product.imageUrl,
+            price: Number(ri.variant.sellPrice),
+            qty: ri.quantity,
+            maxStock: ri.variant.stockQuantity
+        }))];
+        
+        // Add local items that are not in remote
+        for (const local of localItems) {
+            const idx = merged.findIndex(i => i.key === local.key);
+            if (idx === -1) {
+                merged.push(local);
+                // Also save to DB
+                await saveCartItem(local.variantId, local.qty);
+            }
+        }
+        setItems(merged);
+      } else {
+        setItems(localItems);
+      }
+      setReady(true);
+    }
+    init();
   }, []);
 
   // Persist to localStorage
@@ -45,21 +83,33 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     if (ready) localStorage.setItem(KEY, JSON.stringify(items));
   }, [items, ready]);
 
-  const add = useCallback((item: Omit<CartItem, "qty">, qty = 1) => {
+  const add = useCallback(async (item: Omit<CartItem, "qty">, qty = 1) => {
     setItems((prev) => {
       const idx = prev.findIndex((i) => i.key === item.key);
+      let newItems;
       if (idx >= 0) {
         const copy = [...prev];
         copy[idx] = { ...copy[idx], qty: Math.min(copy[idx].qty + qty, copy[idx].maxStock) };
-        return copy;
+        newItems = copy;
+      } else {
+        newItems = [...prev, { ...item, qty: Math.min(qty, item.maxStock) }];
       }
-      return [...prev, { ...item, qty: Math.min(qty, item.maxStock) }];
+      
+      if (isLoggedIn) {
+        const updatedItem = newItems.find(i => i.key === item.key);
+        if (updatedItem) saveCartItem(item.variantId, updatedItem.qty);
+      }
+      return newItems;
     });
-  }, []);
+  }, [isLoggedIn]);
 
-  const remove = useCallback((key: string) => {
-    setItems((prev) => prev.filter((i) => i.key !== key));
-  }, []);
+  const remove = useCallback(async (key: string) => {
+    setItems((prev) => {
+        const newItems = prev.filter((i) => i.key !== key);
+        if (isLoggedIn) removeCartItem(key);
+        return newItems;
+    });
+  }, [isLoggedIn]);
 
   const setQty = useCallback((key: string, qty: number) => {
     setItems((prev) =>

@@ -49,16 +49,6 @@ export async function getCurrentUser() {
   return { 
     id: payload.sub as string, 
     name: payload.name as string, 
-  
-export const rolePermissions: Record<string, string[]> = {
-  ADMIN: ["/admin"], // ADMIN tem acesso a tudo sob /admin
-  MANAGER: ["/admin/produtos", "/admin/estoque", "/admin/vendas", "/admin/clientes"],
-  SELLER: ["/admin/vendas", "/admin/clientes"],
-};
-
-export function canAccess(role: string, path: string): boolean {
-  if (role === "ADMIN") return path.startsWith("/admin");
-  
-  const allowedPaths = rolePermissions[role] || [];
-  return allowedPaths.some((allowed) => path.startsWith(allowed));
+    role: payload.role as string,
+  };
 }

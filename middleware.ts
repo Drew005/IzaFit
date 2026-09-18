@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
-import { canAccess } from "@/lib/auth"; // Importando a nova lógica
+import { canAccess } from "@/lib/permissions";
 
 const SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "izafit-jwt-secret-session-key-dev"
