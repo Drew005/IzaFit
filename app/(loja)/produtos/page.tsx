@@ -39,7 +39,15 @@ export default async function ProdutosPage({
         include: {
           variants: {
             where: { active: true },
-            select: { id: true, sellPrice: true, stockQuantity: true },
+            select: {
+              id: true,
+              sellPrice: true,
+              stockQuantity: true,
+              color: true,
+              colorHex: true,
+              size: true,
+              imageUrl: true,
+            },
           },
           category: { select: { name: true, slug: true } },
         },

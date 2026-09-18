@@ -75,7 +75,16 @@ export default async function ProdutosPage() {
                     p.variants.length > 0
                       ? Math.min(...p.variants.map((v) => Number(v.sellPrice)))
                       : 0;
-                  const productImage = p.imageUrl || p.images?.[0] || null;
+                  const productImage =
+                    p.imageUrl ||
+                    p.images?.[0] ||
+                    p.variants.find((v) => Boolean(v.imageUrl))?.imageUrl ||
+                    null;
+
+                  // Cores únicas
+                  const uniqueColors = Array.from(
+                    new Set(p.variants.map((v) => v.color).filter(Boolean))
+                  );
 
                   return (
                     <tr
@@ -103,7 +112,29 @@ export default async function ProdutosPage() {
                         </Link>
                       </td>
                       <td className="px-5 py-3 text-ink-soft">{p.category?.name ?? "-"}</td>
-                      <td className="px-5 py-3 text-ink-soft">{p.variants.length}</td>
+                      <td className="px-5 py-3 text-ink-soft">
+                        <div>
+                          <span>{p.variants.length} un.</span>
+                          {uniqueColors.length > 0 && (
+                            <div className="mt-1 flex items-center gap-1">
+                              {p.variants
+                                .filter((v, i, self) => v.color && self.findIndex((x) => x.color === v.color) === i)
+                                .slice(0, 4)
+                                .map((v) => (
+                                  <span
+                                    key={v.id}
+                                    title={v.color || undefined}
+                                    className="h-2.5 w-2.5 rounded-full border border-white/20"
+                                    style={{ backgroundColor: v.colorHex || "#666" }}
+                                  />
+                                ))}
+                              {uniqueColors.length > 4 && (
+                                <span className="text-[10px] text-ink-soft">+{uniqueColors.length - 4}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-5 py-3 text-ink">{currency(minPrice)}</td>
                       <td className="px-5 py-3 text-ink-soft">{totalStock} un.</td>
                       <td className="px-5 py-3">

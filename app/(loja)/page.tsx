@@ -14,7 +14,15 @@ export default async function HomePage() {
       where: { active: true },
       include: {
         variants: {
-          select: { id: true, sellPrice: true, stockQuantity: true },
+          select: {
+            id: true,
+            sellPrice: true,
+            stockQuantity: true,
+            color: true,
+            colorHex: true,
+            size: true,
+            imageUrl: true,
+          },
         },
         category: { select: { name: true } },
       },
