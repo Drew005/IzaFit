@@ -99,6 +99,10 @@ export async function createProduct(formData: FormData) {
     });
 
     if (skuList && skuList.length > 0) {
+      const colorList = formData.getAll("variantColor") as string[];
+      const colorHexList = formData.getAll("variantColorHex") as string[];
+      const sizeList = formData.getAll("variantSize") as string[];
+
       for (let i = 0; i < skuList.length; i++) {
         const sku = skuList[i]?.trim();
         if (!sku) continue;
@@ -107,11 +111,25 @@ export async function createProduct(formData: FormData) {
         const sellPrice = parseFloat(sellPriceList[i] || "0");
         const stockQuantity = parseInt(stockQuantityList[i] || "0", 10);
         const minStockAlert = parseInt(minStockAlertList[i] || "5", 10);
+        const color = colorList[i]?.trim() || null;
+        const colorHex = colorHexList[i]?.trim() || null;
+        const size = sizeList[i]?.trim() || null;
+
+        // Upload de imagem específica da variação/cor se enviada
+        const varFile = formData.get(`variantImage_${i}`) as File | null;
+        let varImageUrl: string | null = null;
+        if (varFile && varFile.size > 0) {
+          varImageUrl = await uploadImage(varFile);
+        }
 
         const variant = await tx.productVariant.create({
           data: {
             productId: prod.id,
             sku,
+            color,
+            colorHex,
+            size,
+            imageUrl: varImageUrl,
             costPrice,
             sellPrice,
             stockQuantity,
@@ -207,6 +225,10 @@ export async function updateProduct(id: string, formData: FormData) {
   const sellPrices = formData.getAll("variantSellPrice") as string[];
   const minStockAlerts = formData.getAll("variantMinStockAlert") as string[];
   const actives = formData.getAll("variantActive") as string[];
+  const variantColors = formData.getAll("variantColor") as string[];
+  const variantColorHexes = formData.getAll("variantColorHex") as string[];
+  const variantSizes = formData.getAll("variantSize") as string[];
+  const variantImageUrls = formData.getAll("variantImageUrl") as string[];
 
   // Removed variants
   const removedVariantIds = formData.getAll("removedVariantId") as string[];
@@ -217,6 +239,10 @@ export async function updateProduct(id: string, formData: FormData) {
   const newSellPrices = formData.getAll("newSellPrice") as string[];
   const newStockQuantities = formData.getAll("newStockQuantity") as string[];
   const newMinStockAlerts = formData.getAll("newMinStockAlert") as string[];
+  const newColors = formData.getAll("newColor") as string[];
+  const newColorHexes = formData.getAll("newColorHex") as string[];
+  const newSizes = formData.getAll("newSize") as string[];
+  const newTempIds = formData.getAll("newTempId") as string[];
 
   await prisma.$transaction(async (tx) => {
     await tx.product.update({
@@ -276,10 +302,26 @@ export async function updateProduct(id: string, formData: FormData) {
     for (let i = 0; i < variantIds.length; i++) {
       const vId = variantIds[i];
       if (!vId) continue;
+
+      const varFile = formData.get(`variantImage_${vId}`) as File | null;
+      let varImgUrl = variantImageUrls[i] || null;
+      if (varFile && varFile.size > 0) {
+        const uploaded = await uploadImage(varFile);
+        if (uploaded) varImgUrl = uploaded;
+      }
+      const removeVarImg = formData.get(`removeVariantImage_${vId}`) === "true";
+      if (removeVarImg) {
+        varImgUrl = null;
+      }
+
       await tx.productVariant.update({
         where: { id: vId },
         data: {
           sku: skus[i],
+          color: variantColors[i]?.trim() || null,
+          colorHex: variantColorHexes[i]?.trim() || null,
+          size: variantSizes[i]?.trim() || null,
+          imageUrl: varImgUrl,
           costPrice: parseFloat(costPrices[i] || "0"),
           sellPrice: parseFloat(sellPrices[i] || "0"),
           minStockAlert: parseInt(minStockAlerts[i] || "5", 10),
@@ -297,11 +339,23 @@ export async function updateProduct(id: string, formData: FormData) {
       const sellPrice = parseFloat(newSellPrices[i] || "0");
       const stockQuantity = parseInt(newStockQuantities[i] || "0", 10);
       const minStockAlert = parseInt(newMinStockAlerts[i] || "5", 10);
+      const tempId = newTempIds[i];
+      const newVarFile = tempId
+        ? (formData.get(`newVariantImage_${tempId}`) as File | null)
+        : null;
+      let newVarImgUrl: string | null = null;
+      if (newVarFile && newVarFile.size > 0) {
+        newVarImgUrl = await uploadImage(newVarFile);
+      }
 
       const variant = await tx.productVariant.create({
         data: {
           productId: id,
           sku,
+          color: newColors[i]?.trim() || null,
+          colorHex: newColorHexes[i]?.trim() || null,
+          size: newSizes[i]?.trim() || null,
+          imageUrl: newVarImgUrl,
           costPrice,
           sellPrice,
           stockQuantity,

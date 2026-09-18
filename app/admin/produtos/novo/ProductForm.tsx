@@ -20,6 +20,9 @@ interface Supplier {
 interface VariantRow {
   id: string;
   sku: string;
+  color: string;
+  colorHex: string;
+  size: string;
   costPrice: string;
   sellPrice: string;
   stockQuantity: string;
@@ -37,6 +40,9 @@ export default function ProductForm({
     {
       id: "1",
       sku: "",
+      color: "",
+      colorHex: "#000000",
+      size: "",
       costPrice: "",
       sellPrice: "",
       stockQuantity: "0",
@@ -51,6 +57,9 @@ export default function ProductForm({
       {
         id: String(Date.now()),
         sku: "",
+        color: prev[prev.length - 1]?.color || "",
+        colorHex: prev[prev.length - 1]?.colorHex || "#000000",
+        size: "",
         costPrice: prev[0]?.costPrice || "",
         sellPrice: prev[0]?.sellPrice || "",
         stockQuantity: "0",
@@ -177,13 +186,13 @@ export default function ProductForm({
       {/* Características & Detalhes */}
       <ProductDetailsEditor />
 
-      {/* Variações de Estoque & Preço */}
+      {/* Variações de Estoque, Cores & Fotos */}
       <div className="rounded-md border border-base-line bg-base-raised p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-base font-medium text-ink">Variações & Estoque</h2>
+            <h2 className="text-base font-medium text-ink">Variações, Cores & Fotos</h2>
             <p className="text-xs text-ink-soft mt-0.5">
-              Cada variante vendável (ex: P/Preto, M/Preto ou 900g/Chocolate).
+              Cadastre cores, tamanhos e fotos individuais para cada variação do produto.
             </p>
           </div>
 
@@ -198,31 +207,104 @@ export default function ProductForm({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[750px]">
             <thead>
               <tr className="text-left text-xs text-ink-soft border-b border-base-line">
-                <th className="pb-2 font-normal">SKU / Identificador *</th>
-                <th className="pb-2 font-normal">Preço Custo (R$) *</th>
-                <th className="pb-2 font-normal">Preço Venda (R$) *</th>
-                <th className="pb-2 font-normal">Estoque Inicial</th>
-                <th className="pb-2 font-normal">Alerta Mínimo</th>
+                <th className="pb-2 font-normal">Foto da Cor</th>
+                <th className="pb-2 font-normal">Cor & Amostra</th>
+                <th className="pb-2 font-normal">Tam.</th>
+                <th className="pb-2 font-normal">SKU *</th>
+                <th className="pb-2 font-normal">Custo (R$) *</th>
+                <th className="pb-2 font-normal">Venda (R$) *</th>
+                <th className="pb-2 font-normal">Estoque</th>
+                <th className="pb-2 font-normal">Alerta</th>
                 <th className="pb-2 font-normal text-right">Ação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-base-line/60">
               {variants.map((v, index) => (
                 <tr key={v.id}>
+                  {/* Foto da Variação */}
+                  <td className="py-2.5 pr-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="file"
+                        name={`variantImage_${index}`}
+                        accept="image/*"
+                        className="hidden"
+                        id={`var-img-${v.id}`}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const previewEl = document.getElementById(`preview-${v.id}`) as HTMLImageElement | null;
+                            if (previewEl) {
+                              previewEl.src = URL.createObjectURL(file);
+                              previewEl.classList.remove("hidden");
+                            }
+                          }
+                        }}
+                      />
+                      <div className="h-9 w-9 shrink-0 rounded border border-dashed border-base-line bg-base grid place-items-center overflow-hidden hover:border-volt/60 transition-colors">
+                        <img
+                          id={`preview-${v.id}`}
+                          alt=""
+                          className="h-full w-full object-cover hidden"
+                        />
+                        <span className="text-[10px] text-ink-soft select-none pointer-events-none text-center leading-tight">
+                          + Foto
+                        </span>
+                      </div>
+                    </label>
+                  </td>
+
+                  {/* Cor e Hexadecimal */}
+                  <td className="py-2.5 pr-2">
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="color"
+                        name="variantColorHex"
+                        value={v.colorHex}
+                        onChange={(e) => updateVariant(v.id, "colorHex", e.target.value)}
+                        title="Escolher tom da cor"
+                        className="h-7 w-7 rounded cursor-pointer border border-base-line bg-transparent p-0"
+                      />
+                      <input
+                        type="text"
+                        name="variantColor"
+                        placeholder="Ex: Preto, Rosa..."
+                        value={v.color}
+                        onChange={(e) => updateVariant(v.id, "color", e.target.value)}
+                        className="w-28 rounded-sm border border-base-line bg-base px-2 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                      />
+                    </div>
+                  </td>
+
+                  {/* Tamanho */}
+                  <td className="py-2.5 pr-2">
+                    <input
+                      type="text"
+                      name="variantSize"
+                      placeholder="P, M, G..."
+                      value={v.size}
+                      onChange={(e) => updateVariant(v.id, "size", e.target.value)}
+                      className="w-16 rounded-sm border border-base-line bg-base px-2 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                    />
+                  </td>
+
+                  {/* SKU */}
                   <td className="py-2.5 pr-2">
                     <input
                       type="text"
                       name="sku"
                       required
-                      placeholder={`Ex: PROD-${index + 1}-M`}
+                      placeholder={`PROD-${index + 1}`}
                       value={v.sku}
                       onChange={(e) => updateVariant(v.id, "sku", e.target.value)}
-                      className="w-full rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                      className="w-28 rounded-sm border border-base-line bg-base px-2 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
                     />
                   </td>
+
+                  {/* Preço Custo */}
                   <td className="py-2.5 pr-2">
                     <input
                       type="number"
@@ -233,9 +315,11 @@ export default function ProductForm({
                       placeholder="0.00"
                       value={v.costPrice}
                       onChange={(e) => updateVariant(v.id, "costPrice", e.target.value)}
-                      className="w-28 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                      className="w-24 rounded-sm border border-base-line bg-base px-2 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
                     />
                   </td>
+
+                  {/* Preço Venda */}
                   <td className="py-2.5 pr-2">
                     <input
                       type="number"
@@ -246,9 +330,11 @@ export default function ProductForm({
                       placeholder="0.00"
                       value={v.sellPrice}
                       onChange={(e) => updateVariant(v.id, "sellPrice", e.target.value)}
-                      className="w-28 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                      className="w-24 rounded-sm border border-base-line bg-base px-2 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
                     />
                   </td>
+
+                  {/* Estoque Inicial */}
                   <td className="py-2.5 pr-2">
                     <input
                       type="number"
@@ -256,9 +342,11 @@ export default function ProductForm({
                       min="0"
                       value={v.stockQuantity}
                       onChange={(e) => updateVariant(v.id, "stockQuantity", e.target.value)}
-                      className="w-24 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                      className="w-20 rounded-sm border border-base-line bg-base px-2 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
                     />
                   </td>
+
+                  {/* Alerta Mínimo */}
                   <td className="py-2.5 pr-2">
                     <input
                       type="number"
@@ -266,9 +354,11 @@ export default function ProductForm({
                       min="1"
                       value={v.minStockAlert}
                       onChange={(e) => updateVariant(v.id, "minStockAlert", e.target.value)}
-                      className="w-20 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                      className="w-16 rounded-sm border border-base-line bg-base px-2 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
                     />
                   </td>
+
+                  {/* Ação */}
                   <td className="py-2.5 text-right">
                     <button
                       type="button"

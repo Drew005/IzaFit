@@ -20,6 +20,10 @@ interface Supplier {
 interface Variant {
   id: string;
   sku: string;
+  color?: string | null;
+  colorHex?: string | null;
+  size?: string | null;
+  imageUrl?: string | null;
   costPrice: any;
   sellPrice: any;
   stockQuantity: number;
@@ -44,6 +48,9 @@ interface Product {
 interface NewVariantRow {
   tempId: string;
   sku: string;
+  color: string;
+  colorHex: string;
+  size: string;
   costPrice: string;
   sellPrice: string;
   stockQuantity: string;
@@ -69,11 +76,15 @@ export default function EditProductForm({
   const updateProductWithId = updateProduct.bind(null, product.id);
 
   function addNewVariant() {
+    const lastVar = variants[variants.length - 1];
     setNewVariants((prev) => [
       ...prev,
       {
         tempId: String(Date.now()),
         sku: "",
+        color: lastVar?.color || "",
+        colorHex: lastVar?.colorHex || "#000000",
+        size: "",
         costPrice: String(variants[0]?.costPrice ?? ""),
         sellPrice: String(variants[0]?.sellPrice ?? ""),
         stockQuantity: "0",
@@ -268,23 +279,25 @@ export default function EditProductForm({
           ))}
           <div>
             <h2 className="text-base font-medium text-ink">
-              Variações Cadastradas
+              Variações, Cores & Fotos Cadastradas
             </h2>
             <p className="text-xs text-ink-soft mt-0.5">
-              Edite os preços de custo, venda, alerta de estoque e status das
-              variações já existentes, ou remova variações desnecessárias.
+              Edite as cores, tamanhos, fotos individuais, preços e estoque das variações existentes.
             </p>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[850px]">
               <thead>
                 <tr className="text-left text-xs text-ink-soft border-b border-base-line">
+                  <th className="pb-2 font-normal">Foto da Cor</th>
+                  <th className="pb-2 font-normal">Cor & Amostra</th>
+                  <th className="pb-2 font-normal">Tam.</th>
                   <th className="pb-2 font-normal">SKU *</th>
-                  <th className="pb-2 font-normal">Preço Custo (R$)</th>
-                  <th className="pb-2 font-normal">Preço Venda (R$)</th>
-                  <th className="pb-2 font-normal">Estoque Atual</th>
-                  <th className="pb-2 font-normal">Alerta Mín.</th>
+                  <th className="pb-2 font-normal">Custo (R$)</th>
+                  <th className="pb-2 font-normal">Venda (R$)</th>
+                  <th className="pb-2 font-normal">Estoque</th>
+                  <th className="pb-2 font-normal">Alerta</th>
                   <th className="pb-2 font-normal text-center">Ativa?</th>
                   <th className="pb-2 font-normal text-right">Ação</th>
                 </tr>
@@ -292,13 +305,102 @@ export default function EditProductForm({
               <tbody className="divide-y divide-base-line/60">
                 {variants.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-4 text-center text-xs text-ink-soft italic">
+                    <td colSpan={10} className="py-4 text-center text-xs text-ink-soft italic">
                       Nenhuma variação salva restante. Adicione novas variações abaixo antes de salvar.
                     </td>
                   </tr>
                 ) : (
                   variants.map((v) => (
                     <tr key={v.id}>
+                      {/* Foto da Variação */}
+                      <td className="py-2.5 pr-2">
+                        <input
+                          type="hidden"
+                          name="variantImageUrl"
+                          value={v.imageUrl || ""}
+                        />
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="file"
+                            name={`variantImage_${v.id}`}
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const previewEl = document.getElementById(`edit-preview-${v.id}`) as HTMLImageElement | null;
+                                if (previewEl) {
+                                  previewEl.src = URL.createObjectURL(file);
+                                  previewEl.classList.remove("hidden");
+                                }
+                              }
+                            }}
+                          />
+                          <div className="h-9 w-9 shrink-0 rounded border border-dashed border-base-line bg-base grid place-items-center overflow-hidden hover:border-volt/60 transition-colors">
+                            {v.imageUrl ? (
+                              <img
+                                id={`edit-preview-${v.id}`}
+                                src={v.imageUrl}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <>
+                                <img
+                                  id={`edit-preview-${v.id}`}
+                                  alt=""
+                                  className="h-full w-full object-cover hidden"
+                                />
+                                <span className="text-[10px] text-ink-soft select-none pointer-events-none text-center leading-tight">
+                                  + Foto
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </label>
+                      </td>
+
+                      {/* Cor e Hexadecimal */}
+                      <td className="py-2.5 pr-2">
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="color"
+                            name="variantColorHex"
+                            value={v.colorHex || "#000000"}
+                            onChange={(e) =>
+                              updateExistingVariant(v.id, "colorHex", e.target.value)
+                            }
+                            title="Escolher tom da cor"
+                            className="h-7 w-7 rounded cursor-pointer border border-base-line bg-transparent p-0"
+                          />
+                          <input
+                            type="text"
+                            name="variantColor"
+                            placeholder="Ex: Preto, Rosa..."
+                            value={v.color || ""}
+                            onChange={(e) =>
+                              updateExistingVariant(v.id, "color", e.target.value)
+                            }
+                            className="w-28 rounded-sm border border-base-line bg-base px-2 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                          />
+                        </div>
+                      </td>
+
+                      {/* Tamanho */}
+                      <td className="py-2.5 pr-2">
+                        <input
+                          type="text"
+                          name="variantSize"
+                          placeholder="P, M, G..."
+                          value={v.size || ""}
+                          onChange={(e) =>
+                            updateExistingVariant(v.id, "size", e.target.value)
+                          }
+                          className="w-16 rounded-sm border border-base-line bg-base px-2 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                        />
+                      </td>
+
+                      {/* SKU */}
                       <td className="py-2.5 pr-2">
                         <input type="hidden" name="variantId" value={v.id} />
                         <input
@@ -309,9 +411,11 @@ export default function EditProductForm({
                           onChange={(e) =>
                             updateExistingVariant(v.id, "sku", e.target.value)
                           }
-                          className="w-full rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                          className="w-28 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
                         />
                       </td>
+
+                      {/* Custo */}
                       <td className="py-2.5 pr-2">
                         <input
                           type="number"
@@ -327,9 +431,11 @@ export default function EditProductForm({
                               e.target.value
                             )
                           }
-                          className="w-28 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                          className="w-24 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
                         />
                       </td>
+
+                      {/* Venda */}
                       <td className="py-2.5 pr-2">
                         <input
                           type="number"
@@ -345,14 +451,18 @@ export default function EditProductForm({
                               e.target.value
                             )
                           }
-                          className="w-28 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                          className="w-24 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
                         />
                       </td>
+
+                      {/* Estoque */}
                       <td className="py-2.5 pr-2">
-                        <span className="inline-block px-2.5 py-1.5 text-xs text-ink bg-base rounded-sm border border-base-line/50">
+                        <span className="inline-block px-2 py-1.5 text-xs text-ink bg-base rounded-sm border border-base-line/50">
                           {v.stockQuantity} un.
                         </span>
                       </td>
+
+                      {/* Alerta */}
                       <td className="py-2.5 pr-2">
                         <input
                           type="number"
@@ -366,9 +476,11 @@ export default function EditProductForm({
                               parseInt(e.target.value, 10) || 1
                             )
                           }
-                          className="w-20 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                          className="w-16 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
                         />
                       </td>
+
+                      {/* Status */}
                       <td className="py-2.5 text-center">
                         <input
                           type="hidden"
@@ -384,6 +496,8 @@ export default function EditProductForm({
                           className="rounded border-base-line bg-base text-volt focus:ring-0"
                         />
                       </td>
+
+                      {/* Ação */}
                       <td className="py-2.5 text-right">
                         <button
                           type="button"
@@ -432,20 +546,97 @@ export default function EditProductForm({
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm min-w-[850px]">
                 <thead>
                   <tr className="text-left text-xs text-ink-soft border-b border-base-line">
+                    <th className="pb-2 font-normal">Foto da Cor</th>
+                    <th className="pb-2 font-normal">Cor & Amostra</th>
+                    <th className="pb-2 font-normal">Tam.</th>
                     <th className="pb-2 font-normal">SKU *</th>
-                    <th className="pb-2 font-normal">Preço Custo (R$)</th>
-                    <th className="pb-2 font-normal">Preço Venda (R$)</th>
-                    <th className="pb-2 font-normal">Estoque Inicial</th>
-                    <th className="pb-2 font-normal">Alerta Mín.</th>
+                    <th className="pb-2 font-normal">Custo (R$)</th>
+                    <th className="pb-2 font-normal">Venda (R$)</th>
+                    <th className="pb-2 font-normal">Estoque</th>
+                    <th className="pb-2 font-normal">Alerta</th>
                     <th className="pb-2 font-normal text-right">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-base-line/60">
                   {newVariants.map((nv) => (
                     <tr key={nv.tempId}>
+                      <input type="hidden" name="newTempId" value={nv.tempId} />
+                      {/* Foto da Nova Variação */}
+                      <td className="py-2.5 pr-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="file"
+                            name={`newVariantImage_${nv.tempId}`}
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const previewEl = document.getElementById(`new-preview-${nv.tempId}`) as HTMLImageElement | null;
+                                if (previewEl) {
+                                  previewEl.src = URL.createObjectURL(file);
+                                  previewEl.classList.remove("hidden");
+                                }
+                              }
+                            }}
+                          />
+                          <div className="h-9 w-9 shrink-0 rounded border border-dashed border-base-line bg-base grid place-items-center overflow-hidden hover:border-volt/60 transition-colors">
+                            <img
+                              id={`new-preview-${nv.tempId}`}
+                              alt=""
+                              className="h-full w-full object-cover hidden"
+                            />
+                            <span className="text-[10px] text-ink-soft select-none pointer-events-none text-center leading-tight">
+                              + Foto
+                            </span>
+                          </div>
+                        </label>
+                      </td>
+
+                      {/* Cor e Hexadecimal */}
+                      <td className="py-2.5 pr-2">
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="color"
+                            name="newColorHex"
+                            value={nv.colorHex || "#000000"}
+                            onChange={(e) =>
+                              updateNewVariantField(nv.tempId, "colorHex", e.target.value)
+                            }
+                            title="Escolher tom da cor"
+                            className="h-7 w-7 rounded cursor-pointer border border-base-line bg-transparent p-0"
+                          />
+                          <input
+                            type="text"
+                            name="newColor"
+                            placeholder="Ex: Preto, Rosa..."
+                            value={nv.color || ""}
+                            onChange={(e) =>
+                              updateNewVariantField(nv.tempId, "color", e.target.value)
+                            }
+                            className="w-28 rounded-sm border border-base-line bg-base px-2 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                          />
+                        </div>
+                      </td>
+
+                      {/* Tamanho */}
+                      <td className="py-2.5 pr-2">
+                        <input
+                          type="text"
+                          name="newSize"
+                          placeholder="P, M, G..."
+                          value={nv.size || ""}
+                          onChange={(e) =>
+                            updateNewVariantField(nv.tempId, "size", e.target.value)
+                          }
+                          className="w-16 rounded-sm border border-base-line bg-base px-2 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                        />
+                      </td>
+
+                      {/* SKU */}
                       <td className="py-2.5 pr-2">
                         <input
                           type="text"
@@ -460,9 +651,11 @@ export default function EditProductForm({
                               e.target.value
                             )
                           }
-                          className="w-full rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                          className="w-28 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
                         />
                       </td>
+
+                      {/* Custo */}
                       <td className="py-2.5 pr-2">
                         <input
                           type="number"
@@ -478,9 +671,11 @@ export default function EditProductForm({
                               e.target.value
                             )
                           }
-                          className="w-28 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                          className="w-24 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
                         />
                       </td>
+
+                      {/* Venda */}
                       <td className="py-2.5 pr-2">
                         <input
                           type="number"
@@ -496,9 +691,11 @@ export default function EditProductForm({
                               e.target.value
                             )
                           }
-                          className="w-28 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                          className="w-24 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
                         />
                       </td>
+
+                      {/* Estoque */}
                       <td className="py-2.5 pr-2">
                         <input
                           type="number"
@@ -512,9 +709,11 @@ export default function EditProductForm({
                               e.target.value
                             )
                           }
-                          className="w-24 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                          className="w-20 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
                         />
                       </td>
+
+                      {/* Alerta */}
                       <td className="py-2.5 pr-2">
                         <input
                           type="number"
@@ -528,9 +727,11 @@ export default function EditProductForm({
                               e.target.value
                             )
                           }
-                          className="w-20 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
+                          className="w-16 rounded-sm border border-base-line bg-base px-2.5 py-1.5 text-xs text-ink focus:border-volt focus:outline-none"
                         />
                       </td>
+
+                      {/* Ação */}
                       <td className="py-2.5 text-right">
                         <button
                           type="button"

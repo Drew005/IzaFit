@@ -219,6 +219,10 @@ model ProductVariant {
   product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   sku           String   @unique
   barcode       String?  @unique
+  color         String?  // Ex: "Preto", "Rosa Pink", "Azul Marinho"
+  colorHex      String?  // Ex: "#000000", "#FF1493" (código hexadecimal da cor para bolinhas de swatch)
+  size          String?  // Ex: "P", "M", "G", "GG", "Único"
+  imageUrl      String?  // Foto específica desta cor/variação
   costPrice     Decimal  @db.Decimal(10, 2) // quanto custou comprar/produzir
   sellPrice     Decimal  @db.Decimal(10, 2) // preço de venda atual
   stockQuantity Int      @default(0) // cache — a fonte de verdade é StockMovement
